@@ -11,7 +11,6 @@ import {
   YAxis,
 } from "recharts";
 import { NewOrderModal } from "../components/NewOrderModal";
-import { EventDatePicker } from "../components/EventDatePicker";
 import { Modal, Money, PageHeader, Topbar } from "../components/ui";
 import { useStore } from "../lib/store";
 import {
@@ -21,6 +20,7 @@ import {
   eventMaterialsCost,
   formatDateRange,
   formatEUR,
+  round2,
   uid,
 } from "../lib/utils";
 import type { EventMaterialUsed } from "../types";
@@ -182,7 +182,7 @@ export function EventDashboardPage() {
         />
 
         {editing && (
-          <Modal title="Editar evento" onClose={() => setEditing(false)} wide>
+          <Modal title="Editar evento" onClose={() => setEditing(false)}>
             <form onSubmit={saveEventDetails}>
               <div className="field">
                 <label>Nombre</label>
@@ -198,14 +198,29 @@ export function EventDashboardPage() {
                   onChange={(e) => setPlace(e.target.value)}
                 />
               </div>
-              <EventDatePicker
-                start={date}
-                end={endDate}
-                onChange={(s, e) => {
-                  setDate(s);
-                  setEndDate(e);
-                }}
-              />
+              <div className="grid grid-2">
+                <div className="field">
+                  <label>Fecha inicio</label>
+                  <input
+                    type="date"
+                    value={date}
+                    onChange={(e) => {
+                      const next = e.target.value;
+                      setDate(next);
+                      if (!endDate || endDate < next) setEndDate(next);
+                    }}
+                  />
+                </div>
+                <div className="field">
+                  <label>Fecha fin</label>
+                  <input
+                    type="date"
+                    min={date || undefined}
+                    value={endDate}
+                    onChange={(e) => setEndDate(e.target.value)}
+                  />
+                </div>
+              </div>
               <div className="field">
                 <label>Coste / precio operativo (€)</label>
                 <input
@@ -285,9 +300,9 @@ export function EventDashboardPage() {
               {formatEUR(kpis.materialCost)}
             </div>
             <div className="kpi-hint">
-              {kpis.materialCostIsEstimate
-                ? "Toca para registrar consumo"
-                : "Toca para ver / editar"}
+              {kpis.materialCost > 0
+                ? "Registrado · toca para ver / editar"
+                : "Toca para registrar consumo"}
             </div>
           </button>
           <div className="kpi">
@@ -296,7 +311,7 @@ export function EventDashboardPage() {
               <Money value={kpis.reserva} />
             </div>
             <div className="kpi-hint">
-              Ingresos − materia prima − coste operativo (
+              Sin IVA 21% − materia prima − coste (
               {formatEUR(kpis.eventCost)})
             </div>
           </div>
@@ -455,7 +470,7 @@ export function EventDashboardPage() {
           wide
         >
           <div className="materials-modal-total">
-            Total: <strong>{formatEUR(materialsTotal)}</strong>
+            Total registrado: <strong>{formatEUR(materialsTotal)}</strong>
           </div>
 
           <div className="field">
@@ -545,7 +560,14 @@ export function EventDashboardPage() {
                           }
                         />
                       </td>
-                      <td>{formatEUR(m.quantity * m.unitPrice)}</td>
+                      <td>
+                        {formatEUR(
+                          round2(
+                            (Number(m.quantity) || 0) *
+                              (Number(m.unitPrice) || 0),
+                          ),
+                        )}
+                      </td>
                       <td>
                         <button
                           className="btn btn-danger btn-sm"

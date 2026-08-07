@@ -10,10 +10,10 @@ import {
 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Modal, Money, Topbar } from "../components/ui";
-import { EventDatePicker } from "../components/EventDatePicker";
 import { useStore } from "../lib/store";
 import {
   eventsOnDate,
+  eventKPIs,
   formatDateRange,
   formatEUR,
   globalKPIs,
@@ -31,7 +31,9 @@ import { Link, useNavigate } from "react-router-dom";
 type Tab = "eventos" | "productos" | "materia" | "promos";
 type EventView = "lista" | "calendario";
 type EventModalState =
-  { mode: "edit"; event: Event } | { mode: "new"; date?: string } | null;
+  | { mode: "edit"; event: Event }
+  | { mode: "new"; date?: string; endDate?: string }
+  | null;
 
 const WEEKDAYS = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"];
 
@@ -176,7 +178,7 @@ export function HomePage() {
             className="kpi kpi-clickable"
             onClick={() => setShowGanadoBreakdown(true)}
           >
-            <div className="kpi-label">Total ganado</div>
+            <div className="kpi-label">Beneficio total</div>
             <div className="kpi-value">
               <Money value={homeKpis.totalGanado} />
             </div>
@@ -270,7 +272,7 @@ export function HomePage() {
                       <th>Nombre</th>
                       <th>Fechas</th>
                       <th>Lugar</th>
-                      <th>Coste</th>
+                      <th>Beneficio total</th>
                       <th></th>
                     </tr>
                   </thead>
@@ -286,7 +288,9 @@ export function HomePage() {
                         </td>
                         <td>{formatDateRange(e.date, e.endDate)}</td>
                         <td>{e.place}</td>
-                        <td>{formatEUR(e.cost)}</td>
+                        <td>
+                          <Money value={eventKPIs(data, e.id).reserva} />
+                        </td>
                         <td>
                           <div
                             className="event-row-actions"
@@ -383,7 +387,11 @@ export function HomePage() {
                         className={`calendar-cell clickable${dayEvents.length ? " has-events" : ""}${isToday ? " today" : ""}`}
                         onClick={() => {
                           if (dayEvents.length === 0) {
-                            setEventModal({ mode: "new", date: iso });
+                            setEventModal({
+                              mode: "new",
+                              date: iso,
+                              endDate: iso,
+                            });
                           }
                         }}
                         onKeyDown={(ev) => {
@@ -392,7 +400,11 @@ export function HomePage() {
                             (ev.key === "Enter" || ev.key === " ")
                           ) {
                             ev.preventDefault();
-                            setEventModal({ mode: "new", date: iso });
+                            setEventModal({
+                              mode: "new",
+                              date: iso,
+                              endDate: iso,
+                            });
                           }
                         }}
                       >
@@ -669,7 +681,7 @@ export function HomePage() {
 
       {showGanadoBreakdown && (
         <Modal
-          title="Desglose · Total ganado"
+          title="Desglose · Beneficio total"
           onClose={() => setShowGanadoBreakdown(false)}
         >
           <div className="breakdown-list">
@@ -702,7 +714,7 @@ export function HomePage() {
               </strong>
             </div>
             <div className="breakdown-row breakdown-total">
-              <span>Total ganado</span>
+              <span>Beneficio total</span>
               <strong>
                 <Money value={homeKpis.totalGanado} />
               </strong>
@@ -724,6 +736,9 @@ export function HomePage() {
         <EventFormModal
           initial={eventModal.mode === "edit" ? eventModal.event : null}
           defaultDate={eventModal.mode === "new" ? eventModal.date : undefined}
+          defaultEndDate={
+            eventModal.mode === "new" ? eventModal.endDate : undefined
+          }
           onClose={() => setEventModal(null)}
           onSave={(payload) => {
             if (eventModal.mode === "new") addEvent(payload);
@@ -796,18 +811,24 @@ function promoValueLabel(p: Promotion) {
 function EventFormModal({
   initial,
   defaultDate,
+  defaultEndDate,
   onClose,
   onSave,
 }: {
   initial: Event | null;
   defaultDate?: string;
+  defaultEndDate?: string;
   onClose: () => void;
   onSave: (p: Omit<Event, "id" | "createdAt">) => void;
 }) {
   const [name, setName] = useState(initial?.name || "");
   const [date, setDate] = useState(initial?.date || defaultDate || "");
   const [endDate, setEndDate] = useState(
-    initial?.endDate || initial?.date || defaultDate || "",
+    initial?.endDate ||
+      initial?.date ||
+      defaultEndDate ||
+      defaultDate ||
+      "",
   );
   const [place, setPlace] = useState(initial?.place || "");
   const [cost, setCost] = useState(String(initial?.cost ?? ""));
@@ -816,7 +837,6 @@ function EventFormModal({
     <Modal
       title={initial ? "Editar evento" : "Nuevo evento"}
       onClose={onClose}
-      wide
     >
       <form
         onSubmit={(e) => {
@@ -837,14 +857,29 @@ function EventFormModal({
           <label>Nombre</label>
           <input value={name} onChange={(e) => setName(e.target.value)} />
         </div>
-        <EventDatePicker
-          start={date}
-          end={endDate}
-          onChange={(s, e) => {
-            setDate(s);
-            setEndDate(e);
-          }}
-        />
+        <div className="grid grid-2">
+          <div className="field">
+            <label>Fecha inicio</label>
+            <input
+              type="date"
+              value={date}
+              onChange={(e) => {
+                const next = e.target.value;
+                setDate(next);
+                if (!endDate || endDate < next) setEndDate(next);
+              }}
+            />
+          </div>
+          <div className="field">
+            <label>Fecha fin</label>
+            <input
+              type="date"
+              min={date || undefined}
+              value={endDate}
+              onChange={(e) => setEndDate(e.target.value)}
+            />
+          </div>
+        </div>
         <div className="field">
           <label>Lugar</label>
           <input value={place} onChange={(e) => setPlace(e.target.value)} />

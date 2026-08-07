@@ -135,7 +135,7 @@ export function round2(n: number): number {
   return Math.round(n * 100) / 100;
 }
 
-/** Rough cost estimate: ~28% of sale price as materia prima */
+/** Rough cost estimate: ~28% of sale price as materia prima (unused in KPIs) */
 export function estimateMaterialCost(orders: Order[]): number {
   const paid = orders.filter((o) => o.status === 'entregado' || o.paid);
   const revenue = paid.reduce((s, o) => s + o.total, 0);
@@ -145,7 +145,7 @@ export function estimateMaterialCost(orders: Order[]): number {
 export function eventMaterialsCost(event: Event): number {
   return round2(
     (event.materialsUsed || []).reduce(
-      (sum, m) => sum + m.quantity * m.unitPrice,
+      (sum, m) => sum + (Number(m.quantity) || 0) * (Number(m.unitPrice) || 0),
       0,
     ),
   );
@@ -214,14 +214,13 @@ export function eventKPIs(data: AppData, eventId: string) {
   const orders = data.orders.filter((o) => o.eventId === eventId);
   const completed = orders.filter((o) => o.status === 'entregado' || o.paid);
   const revenue = round2(completed.reduce((s, o) => s + o.total, 0));
-  const loggedCost = event ? eventMaterialsCost(event) : 0;
-  const materialCost =
-    loggedCost > 0 ? loggedCost : estimateMaterialCost(orders);
-  const materialCostIsEstimate = loggedCost <= 0;
+  const materialCost = event ? eventMaterialsCost(event) : 0;
   const eventCost = event?.cost || 0;
-  /** Beneficio neto = ingresos − materia prima − coste operativo del evento */
-  const reserva = round2(revenue - materialCost - eventCost);
-  const margin = round2(revenue - materialCost);
+  const iva = ivaFromGross(revenue);
+  const base = netFromGross(revenue);
+  /** Beneficio neto = base sin IVA − materia prima − coste operativo */
+  const reserva = round2(base - materialCost - eventCost);
+  const margin = round2(base - materialCost);
   const avgTicket =
     completed.length > 0 ? round2(revenue / completed.length) : 0;
 
@@ -251,8 +250,10 @@ export function eventKPIs(data: AppData, eventId: string) {
   return {
     totalOrders: orders.length,
     revenue,
+    iva,
+    base,
     materialCost,
-    materialCostIsEstimate,
+    materialCostIsEstimate: false,
     eventCost,
     margin,
     reserva,
