@@ -40,7 +40,6 @@ export function HistoryPage() {
   return (
     <div className="app-shell">
       <Topbar
-        subtitle={`Histórico · ${event.name}`}
         right={
           <Link
             className="btn btn-primary btn-sm"

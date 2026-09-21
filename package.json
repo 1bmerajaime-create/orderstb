@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
+    "open": "npm run build && open dist/index.html",
     "lint": "oxlint",
     "preview": "vite preview"
   },
@@ -23,6 +24,7 @@
     "@vitejs/plugin-react": "^6.0.4",
     "oxlint": "^1.75.0",
     "typescript": "~6.0.2",
-    "vite": "^8.2.0"
+    "vite": "^8.2.0",
+    "vite-plugin-singlefile": "^2.3.3"
   }
 }

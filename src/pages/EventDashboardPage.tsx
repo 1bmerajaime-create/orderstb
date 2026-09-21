@@ -10,12 +10,10 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import { NewOrderModal } from "../components/NewOrderModal";
 import { Modal, Money, PageHeader, Topbar } from "../components/ui";
 import { useStore } from "../lib/store";
 import {
   buildSalesSeries,
-  type ChartGranularity,
   eventKPIs,
   eventMaterialsCost,
   formatDateRange,
@@ -30,11 +28,9 @@ export function EventDashboardPage() {
   const navigate = useNavigate();
   const { data, logout, updateEvent, deleteEvent } = useStore();
   const event = data.events.find((e) => e.id === eventId);
-  const [showNewOrder, setShowNewOrder] = useState(false);
   const [editing, setEditing] = useState(false);
   const [showMaterials, setShowMaterials] = useState(false);
-  const [chartGranularity, setChartGranularity] =
-    useState<ChartGranularity>("hora");
+  const [salesProductId, setSalesProductId] = useState("all");
 
   const [name, setName] = useState("");
   const [date, setDate] = useState("");
@@ -58,23 +54,17 @@ export function EventDashboardPage() {
 
   const salesSeries = useMemo(
     () =>
-      kpis ? buildSalesSeries(kpis.completedOrders, chartGranularity) : [],
-    [kpis, chartGranularity],
-  );
-
-  const ordersSeries = useMemo(
-    () => (kpis ? buildSalesSeries(kpis.allOrders, chartGranularity) : []),
-    [kpis, chartGranularity],
+      kpis
+        ? buildSalesSeries(
+            kpis.completedOrders,
+            "hora",
+            salesProductId === "all" ? undefined : salesProductId,
+          )
+        : [],
+    [kpis, salesProductId],
   );
 
   const materialsTotal = event ? eventMaterialsCost(event) : 0;
-
-  const chartTitle =
-    chartGranularity === "hora"
-      ? "por hora"
-      : chartGranularity === "dia"
-        ? "por día"
-        : "por semana";
 
   if (!event || !kpis) return <Navigate to="/" replace />;
 
@@ -127,7 +117,6 @@ export function EventDashboardPage() {
   return (
     <div className="app-shell">
       <Topbar
-        subtitle={event.name}
         right={
           <>
             <Link
@@ -147,6 +136,17 @@ export function EventDashboardPage() {
         <PageHeader
           backTo="/"
           backLabel="Atrás"
+          topAction={
+            <button
+              className="icon-btn"
+              type="button"
+              aria-label="Editar evento"
+              title="Editar evento"
+              onClick={() => setEditing(true)}
+            >
+              <Pencil size={18} />
+            </button>
+          }
           title={event.name}
           description={
             <>
@@ -156,18 +156,12 @@ export function EventDashboardPage() {
           }
           actions={
             <>
-              <button
-                className="btn btn-ghost btn-lg"
-                onClick={() => setEditing(true)}
-              >
-                <Pencil size={18} /> Editar evento
-              </button>
-              <button
+              <Link
                 className="btn btn-primary btn-lg"
-                onClick={() => setShowNewOrder(true)}
+                to={`/evento/${event.id}/nuevo-pedido`}
               >
                 <Plus size={18} /> Crear pedido
-              </button>
+              </Link>
               <Link
                 className="btn btn-ghost btn-lg"
                 to={`/evento/${event.id}/pedidos`}
@@ -317,29 +311,26 @@ export function EventDashboardPage() {
           </div>
         </div>
 
-        <div className="chart-filters">
-          {(
-            [
-              ["hora", "Horas"],
-              ["dia", "Días"],
-              ["semana", "Semana"],
-            ] as const
-          ).map(([id, label]) => (
-            <button
-              key={id}
-              type="button"
-              className={`nav-pill${chartGranularity === id ? " active" : ""}`}
-              onClick={() => setChartGranularity(id)}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
-
         <div className="grid grid-2" style={{ marginBottom: "1.25rem" }}>
           <section className="panel">
             <div className="panel-header">
-              <h2>Ventas {chartTitle}</h2>
+              <div>
+                <h2>Ventas durante el día</h2>
+                <p className="panel-subtitle">Ingresos agrupados por hora</p>
+              </div>
+              <select
+                className="chart-product-filter"
+                aria-label="Filtrar ventas por producto"
+                value={salesProductId}
+                onChange={(event) => setSalesProductId(event.target.value)}
+              >
+                <option value="all">Todos los productos</option>
+                {data.products.map((product) => (
+                  <option key={product.id} value={product.id}>
+                    {product.name}
+                  </option>
+                ))}
+              </select>
             </div>
             {salesSeries.length === 0 ? (
               <div className="empty">
@@ -380,88 +371,28 @@ export function EventDashboardPage() {
 
           <section className="panel">
             <div className="panel-header">
-              <h2>Pedidos {chartTitle}</h2>
+              <h2>Productos más vendidos</h2>
             </div>
-            {ordersSeries.length === 0 ? (
+            {kpis.productSales.length === 0 ? (
               <div className="empty">
-                <strong>Sin actividad</strong>
-                Crea el primer pedido para empezar el servicio.
+                <strong>Todavía no hay ventas</strong>
+                La clasificación aparecerá cuando haya pedidos cobrados.
               </div>
             ) : (
-              <div className="chart-box">
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={ordersSeries}>
-                    <CartesianGrid
-                      stroke="rgba(201,168,232,0.12)"
-                      vertical={false}
-                    />
-                    <XAxis
-                      dataKey="label"
-                      stroke="#c4a8de"
-                      tick={{ fill: "#c4a8de", fontSize: 12 }}
-                    />
-                    <YAxis
-                      allowDecimals={false}
-                      stroke="#c4a8de"
-                      tick={{ fill: "#c4a8de", fontSize: 12 }}
-                    />
-                    <Tooltip
-                      contentStyle={{
-                        background: "#1e1030",
-                        border: "1px solid rgba(201,168,232,0.2)",
-                        borderRadius: 12,
-                      }}
-                    />
-                    <Bar dataKey="count" fill="#7a35c0" radius={[8, 8, 0, 0]} />
-                  </BarChart>
-                </ResponsiveContainer>
+              <div className="top-products-list">
+                {kpis.productSales.map((product, index) => (
+                  <div className="top-product-row" key={product.name}>
+                    <span className="top-product-position">{index + 1}</span>
+                    <span className="top-product-name">{product.name}</span>
+                    <strong>{product.qty} ud.</strong>
+                    <span>{formatEUR(product.revenue)}</span>
+                  </div>
+                ))}
               </div>
             )}
           </section>
         </div>
-
-        <section className="panel">
-          <div className="panel-header">
-            <h2>Productos más vendidos</h2>
-          </div>
-          {kpis.productSales.length === 0 ? (
-            <div className="empty">
-              <strong>Todavía no hay ventas</strong>
-              Comparativa de bowls cuando haya pedidos cobrados.
-            </div>
-          ) : (
-            <div className="table-wrap">
-              <table>
-                <thead>
-                  <tr>
-                    <th>Producto</th>
-                    <th>Ud. vendidas</th>
-                    <th>Ingresos</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {kpis.productSales.map((p) => (
-                    <tr key={p.name}>
-                      <td>
-                        <strong>{p.name}</strong>
-                      </td>
-                      <td>{p.qty}</td>
-                      <td>{formatEUR(p.revenue)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </section>
       </main>
-
-      {showNewOrder && (
-        <NewOrderModal
-          eventId={event.id}
-          onClose={() => setShowNewOrder(false)}
-        />
-      )}
 
       {showMaterials && (
         <Modal

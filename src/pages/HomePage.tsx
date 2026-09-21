@@ -37,19 +37,6 @@ type EventModalState =
 
 const WEEKDAYS = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"];
 
-function initialCalendarMonth(events: Event[]): Date {
-  const sorted = [...events].sort((a, b) => a.date.localeCompare(b.date));
-  const today = toLocalISO(new Date());
-  const upcoming =
-    sorted.find((e) => (e.endDate || e.date) >= today) || sorted[0];
-  if (!upcoming) {
-    const d = new Date();
-    return new Date(d.getFullYear(), d.getMonth(), 1);
-  }
-  const [y, m] = upcoming.date.split("-").map(Number);
-  return new Date(y, m - 1, 1);
-}
-
 export function HomePage() {
   const navigate = useNavigate();
   const {
@@ -71,9 +58,10 @@ export function HomePage() {
 
   const [tab, setTab] = useState<Tab>("eventos");
   const [eventView, setEventView] = useState<EventView>("calendario");
-  const [calMonth, setCalMonth] = useState(() =>
-    initialCalendarMonth(data.events),
-  );
+  const [calMonth, setCalMonth] = useState(() => {
+    const now = new Date();
+    return new Date(now.getFullYear(), now.getMonth(), 1);
+  });
   const [eventModal, setEventModal] = useState<EventModalState>(null);
   const [productModal, setProductModal] = useState<Product | "new" | null>(
     null,
@@ -339,7 +327,25 @@ export function HomePage() {
                   >
                     <ChevronLeft size={18} />
                   </button>
-                  <strong className="calendar-month">{monthLabel}</strong>
+                  <div className="calendar-toolbar-center">
+                    <strong className="calendar-month">{monthLabel}</strong>
+                    <button
+                      type="button"
+                      className="calendar-today-button"
+                      onClick={() => {
+                        const now = new Date();
+                        setCalMonth(
+                          new Date(now.getFullYear(), now.getMonth(), 1),
+                        );
+                      }}
+                    >
+                      Hoy ·{" "}
+                      {new Date().toLocaleDateString("es-ES", {
+                        day: "numeric",
+                        month: "short",
+                      })}
+                    </button>
+                  </div>
                   <button
                     className="icon-btn"
                     type="button"
@@ -410,6 +416,7 @@ export function HomePage() {
                       >
                         <span className="calendar-day">
                           {cell.date.getDate()}
+                          {isToday && <small>Hoy</small>}
                         </span>
                         <div className="calendar-events">
                           {dayEvents.map((e) => (

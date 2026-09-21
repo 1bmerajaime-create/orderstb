@@ -5,6 +5,7 @@ import { LoginPage } from './pages/LoginPage';
 import { HomePage } from './pages/HomePage';
 import { EventDashboardPage } from './pages/EventDashboardPage';
 import { OrdersPage } from './pages/OrdersPage';
+import { NewOrderPage } from './pages/NewOrderPage';
 import { HistoryPage } from './pages/HistoryPage';
 
 function ScrollToTop() {
@@ -48,6 +49,14 @@ export default function App() {
           element={
             <Protected>
               <OrdersPage />
+            </Protected>
+          }
+        />
+        <Route
+          path="/evento/:eventId/nuevo-pedido"
+          element={
+            <Protected>
+              <NewOrderPage />
             </Protected>
           }
         />

@@ -1,6 +1,7 @@
 import { type FormEvent, useState } from 'react';
 import { Navigate, useNavigate } from 'react-router-dom';
 import { useStore } from '../lib/store';
+import logoVerticalUrl from '../assets/logo-vertical.png';
 
 export function LoginPage() {
   const { login, authenticated } = useStore();
@@ -23,9 +24,8 @@ export function LoginPage() {
     <div className="login-page">
       <form className="login-card" onSubmit={onSubmit}>
         <div className="login-logo">
-          <img src="/logo.png" alt="Tropic Boost" />
+          <img src={logoVerticalUrl} alt="Tropic Boost — açaí bowls" />
           <p className="eyebrow">Operaciones · Eventos</p>
-          <h1>Tropic Boost</h1>
           <p>Acceso al portal de gestión de pedidos</p>
         </div>
 

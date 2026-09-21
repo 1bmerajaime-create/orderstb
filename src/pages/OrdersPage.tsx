@@ -1,21 +1,19 @@
 import { Check, ChefHat, History, Plus } from 'lucide-react';
 import { useMemo, useState, type ReactNode } from 'react';
 import { Link, Navigate, useParams } from 'react-router-dom';
-import { NewOrderModal } from '../components/NewOrderModal';
 import { OrderDetailModal } from '../components/OrderDetailModal';
-import { PageHeader, StatusBadge, Topbar } from '../components/ui';
+import { PageHeader, Topbar } from '../components/ui';
 import { useStore } from '../lib/store';
-import { formatEUR, formatTime } from '../lib/utils';
+import { formatTime } from '../lib/utils';
 import type { Order } from '../types';
 
 type BoardTab = 'curso' | 'listos';
 
 export function OrdersPage() {
   const { eventId } = useParams();
-  const { data, updateOrderStatus, markPaid } = useStore();
+  const { data, updateOrderStatus } = useStore();
   const event = data.events.find((e) => e.id === eventId);
   const [tab, setTab] = useState<BoardTab>('curso');
-  const [showNewOrder, setShowNewOrder] = useState(false);
   const [detailOrder, setDetailOrder] = useState<Order | null>(null);
 
   const eventOrders = useMemo(
@@ -65,20 +63,28 @@ export function OrdersPage() {
               {order.customerName} · {formatTime(order.createdAt)}
             </div>
           </div>
-          <StatusBadge status={order.status} />
         </div>
-        <ul className="order-lines">
-          {order.lines.map((l) => (
-            <li key={l.productId}>
-              {l.quantity}× {l.productName}
-            </li>
-          ))}
-        </ul>
-        <div className="order-card-foot">
-          <strong>{formatEUR(order.total)}</strong>
-          {!order.paid && (
-            <span className="badge badge-unpaid">Sin pagar</span>
-          )}
+        <div className="order-card-products">
+          {order.lines.map((line, index) => {
+            const product = data.products.find(
+              (item) => item.id === line.productId,
+            );
+            const ingredients = line.ingredients || product?.ingredients || [];
+            return (
+              <div
+                className="order-card-product"
+                key={`${line.productId}-${index}`}
+              >
+                <strong>
+                  {line.quantity}× {line.productName}
+                  {line.customized && (
+                    <span className="customized-badge">Modificado</span>
+                  )}
+                </strong>
+                <span>{ingredients.join(' · ')}</span>
+              </div>
+            );
+          })}
         </div>
         {actions && (
           <div
@@ -96,15 +102,14 @@ export function OrdersPage() {
   return (
     <div className="app-shell">
       <Topbar
-        subtitle={`Pedidos · ${event.name}`}
         right={
           <>
-            <button
+            <Link
               className="btn btn-primary btn-sm"
-              onClick={() => setShowNewOrder(true)}
+              to={`/evento/${event.id}/nuevo-pedido`}
             >
               <Plus size={16} /> Crear pedido
-            </button>
+            </Link>
             <Link
               className="btn btn-ghost btn-sm"
               to={`/evento/${event.id}/historico`}
@@ -120,7 +125,7 @@ export function OrdersPage() {
           backTo={`/evento/${event.id}`}
           backLabel="Atrás"
           title="Pedidos"
-          description="Los pedidos nuevos aparecen en curso. Al marcarlos listos pasan a Listos. Toca una card para ver el detalle o eliminarlo."
+          description="Consulta cada producto y sus ingredientes. La acción principal termina el pedido y lo mueve a Listos."
         />
 
         <div className="tabs-row">
@@ -156,32 +161,12 @@ export function OrdersPage() {
                     order={o}
                     className={o.status === 'en_preparacion' ? 'prep' : ''}
                     actions={
-                      <>
-                        {o.status === 'pendiente' && (
-                          <button
-                            className="btn btn-primary btn-sm"
-                            onClick={() =>
-                              updateOrderStatus(o.id, 'en_preparacion')
-                            }
-                          >
-                            Empezar
-                          </button>
-                        )}
-                        <button
-                          className="btn btn-primary btn-sm"
-                          onClick={() => updateOrderStatus(o.id, 'listo')}
-                        >
-                          Marcar listo
-                        </button>
-                        {!o.paid && (
-                          <button
-                            className="btn btn-ghost btn-sm"
-                            onClick={() => markPaid(o.id, 'tarjeta')}
-                          >
-                            Cobrar
-                          </button>
-                        )}
-                      </>
+                      <button
+                        className="btn btn-primary"
+                        onClick={() => updateOrderStatus(o.id, 'listo')}
+                      >
+                        <Check size={17} /> Marcar como terminado
+                      </button>
                     }
                   />
                 ))}
@@ -211,12 +196,6 @@ export function OrdersPage() {
         )}
       </main>
 
-      {showNewOrder && (
-        <NewOrderModal
-          eventId={event.id}
-          onClose={() => setShowNewOrder(false)}
-        />
-      )}
       {detailOrder && (
         <OrderDetailModal
           order={detailOrder}

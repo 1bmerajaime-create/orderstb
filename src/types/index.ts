@@ -62,6 +62,10 @@ export interface OrderLine {
   productName: string;
   quantity: number;
   unitPrice: number;
+  /** Foto de los ingredientes elegidos en el momento de crear el pedido. */
+  ingredients?: string[];
+  /** La receta preestablecida se modificó para este bowl. */
+  customized?: boolean;
 }
 
 export interface Order {

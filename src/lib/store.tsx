@@ -273,10 +273,43 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const deleteOrder = useCallback((id: string) => {
-    setData((prev) => ({
-      ...prev,
-      orders: prev.orders.filter((o) => o.id !== id),
-    }));
+    setData((prev) => {
+      const removed = prev.orders.find((order) => order.id === id);
+      if (!removed) return prev;
+
+      const remaining = prev.orders.filter((order) => order.id !== id);
+      const eventOrders = remaining
+        .filter((order) => order.eventId === removed.eventId)
+        .sort(
+          (a, b) =>
+            new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
+        );
+      const numberById = new Map(
+        eventOrders.map((order, index) => [order.id, index + 1]),
+      );
+      const orders = remaining.map((order) => {
+        const number = numberById.get(order.id);
+        if (!number) return order;
+        const defaultCustomer = `Cliente #${order.number}`;
+        return {
+          ...order,
+          number,
+          customerName:
+            order.customerName === defaultCustomer
+              ? `Cliente #${number}`
+              : order.customerName,
+        };
+      });
+
+      return {
+        ...prev,
+        orders,
+        orderCounter: {
+          ...prev.orderCounter,
+          [removed.eventId]: eventOrders.length,
+        },
+      };
+    });
   }, []);
 
   const value = useMemo(

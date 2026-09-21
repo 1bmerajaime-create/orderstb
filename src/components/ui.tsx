@@ -2,6 +2,7 @@ import { ArrowLeft, X } from 'lucide-react';
 import { useEffect, type ReactNode } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { formatEUR } from '../lib/utils';
+import logoHorizontalUrl from '../assets/logo-horizontal.png';
 
 export function Modal({
   title,
@@ -72,21 +73,15 @@ export function Money({
   );
 }
 
-export function Topbar({
-  right,
-  subtitle,
-}: {
-  right?: ReactNode;
-  subtitle?: string;
-}) {
+export function Topbar({ right }: { right?: ReactNode }) {
   return (
     <header className="topbar">
-      <Link to="/" className="brand">
-        <img src="/logo.png" alt="Tropic Boost" />
-        <div className="brand-text">
-          <span className="brand-name">Tropic Boost</span>
-          <span className="brand-tag">{subtitle || 'Push, Recover, Enjoy'}</span>
-        </div>
+      <Link to="/" className="brand" aria-label="Tropic Boost">
+        <img
+          src={logoHorizontalUrl}
+          alt="Tropic Boost"
+          className="brand-logo"
+        />
       </Link>
       <div className="topbar-actions">{right}</div>
     </header>
@@ -100,14 +95,16 @@ export function PageHeader({
   backLabel = 'Atrás',
   showBack,
   actions,
+  topAction,
 }: {
   title?: string;
   description?: ReactNode;
-  /** Fallback si no hay historial interno */
+  /** Destino fijo del botón Atrás (p. ej. "/" o el evento). */
   backTo?: string;
   backLabel?: string;
   showBack?: boolean;
   actions?: ReactNode;
+  topAction?: ReactNode;
 }) {
   const navigate = useNavigate();
   const canGoBack = showBack || !!backTo;
@@ -115,23 +112,27 @@ export function PageHeader({
   if (!canGoBack && !actions && !title) return null;
 
   function handleBack() {
-    const idx = (window.history.state as { idx?: number } | null)?.idx;
-    if (typeof idx === 'number' && idx > 0) {
-      navigate(-1);
+    if (backTo) {
+      navigate(backTo);
       return;
     }
-    navigate(backTo || '/');
+    navigate(-1);
   }
 
   return (
     <div className={`page-header${actions ? ' event-header' : ''}`}>
+      {(canGoBack || topAction) && (
+        <div className="page-header-topline">
+          {canGoBack && (
+            <button type="button" className="back-link" onClick={handleBack}>
+              <ArrowLeft size={18} />
+              {backLabel}
+            </button>
+          )}
+          {topAction && <div className="page-header-top-action">{topAction}</div>}
+        </div>
+      )}
       <div className="page-header-main">
-        {canGoBack && (
-          <button type="button" className="back-link" onClick={handleBack}>
-            <ArrowLeft size={18} />
-            {backLabel}
-          </button>
-        )}
         {title && <h1>{title}</h1>}
         {description && <p>{description}</p>}
       </div>

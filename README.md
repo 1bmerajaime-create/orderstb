@@ -6,12 +6,30 @@ Basada en la identidad visual de [tropicboost.com](https://www.tropicboost.com/#
 
 ## Arranque
 
+### Opción A · Abrir el archivo directamente
+
+```bash
+npm install
+npm run build
+```
+
+Genera `dist/index.html`, un único archivo autocontenido (HTML, CSS, JS e imágenes
+incluidos). Ábrelo con doble clic desde el Finder, sin necesidad de servidor.
+El atajo `npm run open` compila y lo abre de una vez.
+
+Hay que repetir el `build` cada vez que se cambie el código.
+
+### Opción B · Servidor de desarrollo
+
 ```bash
 npm install
 npm run dev
 ```
 
-Abre `http://localhost:5173` e introduce la contraseña:
+Abre `http://localhost:5173`. Recarga en caliente al editar, pero requiere mantener
+la terminal abierta.
+
+En ambos casos la contraseña es:
 
 ```
 tropic.boost

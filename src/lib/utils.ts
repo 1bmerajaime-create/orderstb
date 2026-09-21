@@ -182,10 +182,20 @@ function labelForBucket(key: string, granularity: ChartGranularity): string {
 export function buildSalesSeries(
   orders: Order[],
   granularity: ChartGranularity,
+  productId?: string,
 ): Array<{ label: string; total: number; count: number }> {
   const buckets: Record<string, { total: number; count: number }> = {};
 
   orders.forEach((o) => {
+    const productTotal = productId
+      ? o.lines
+          .filter((line) => line.productId === productId)
+          .reduce(
+            (sum, line) => sum + line.unitPrice * line.quantity,
+            0,
+          )
+      : o.total;
+    if (productId && productTotal === 0) return;
     const d = new Date(o.createdAt);
     let key: string;
     if (granularity === 'hora') {
@@ -196,7 +206,7 @@ export function buildSalesSeries(
       key = weekKey(d);
     }
     if (!buckets[key]) buckets[key] = { total: 0, count: 0 };
-    buckets[key].total += o.total;
+    buckets[key].total += productTotal;
     buckets[key].count += 1;
   });
 
@@ -325,8 +335,10 @@ export function globalKPIs(data: AppData) {
 }
 
 export function nextOrderNumber(data: AppData, eventId: string): number {
-  const current = data.orderCounter[eventId] || 0;
-  return current + 1;
+  const currentMax = data.orders
+    .filter((order) => order.eventId === eventId)
+    .reduce((max, order) => Math.max(max, order.number), 0);
+  return currentMax + 1;
 }
 
 export type {
