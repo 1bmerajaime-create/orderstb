@@ -17,9 +17,27 @@ function ScrollToTop() {
 }
 
 function Protected({ children }: { children: React.ReactNode }) {
-  const { authenticated } = useStore();
+  const { authenticated, cloudEnabled, syncReady, syncError } = useStore();
   if (!authenticated) return <Navigate to="/login" replace />;
-  return <>{children}</>;
+  if (cloudEnabled && !syncReady && !syncError) {
+    return (
+      <div className="app-shell">
+        <main className="page" style={{ paddingTop: '3rem' }}>
+          <p className="muted">Sincronizando datos…</p>
+        </main>
+      </div>
+    );
+  }
+  return (
+    <>
+      {cloudEnabled && syncError && (
+        <div className="sync-banner sync-banner-error">
+          Error de sincronización: {syncError}
+        </div>
+      )}
+      {children}
+    </>
+  );
 }
 
 export default function App() {

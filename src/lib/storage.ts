@@ -27,7 +27,7 @@ function normalizeEvent(
   };
 }
 
-function normalizeData(data: AppData): AppData {
+export function normalizeData(data: AppData): AppData {
   const events = (data.events || []).map((e) => normalizeEvent(e));
   const eventIds = new Set(events.map((e) => e.id));
   const validOrders = (data.orders || []).filter((o) => eventIds.has(o.eventId));

@@ -18,6 +18,22 @@ import type {
   Product,
   Promotion,
 } from '../types';
+import {
+  createOrderAtomic,
+  ensureSeeded,
+  removeEvent,
+  removeMaterial,
+  removeOrderAndRenumber,
+  removeProduct,
+  removePromotion,
+  subscribeAppData,
+  upsertEvent,
+  upsertMaterial,
+  upsertOrder,
+  upsertProduct,
+  upsertPromotion,
+} from './cloud';
+import { cloudLogin, cloudLogout, isCloudEnabled } from './firebase';
 import { isAuthenticated, loadData, saveData, setAuthenticated } from './storage';
 import { PASSWORD } from './seed';
 import {
@@ -31,24 +47,27 @@ import {
 interface StoreContextValue {
   data: AppData;
   authenticated: boolean;
-  login: (password: string) => boolean;
-  logout: () => void;
+  syncReady: boolean;
+  syncError: string | null;
+  cloudEnabled: boolean;
+  login: (password: string) => Promise<boolean>;
+  logout: () => Promise<void>;
   // Events
-  addEvent: (e: Omit<Event, 'id' | 'createdAt'>) => Event;
-  updateEvent: (id: string, patch: Partial<Event>) => void;
-  deleteEvent: (id: string) => void;
+  addEvent: (e: Omit<Event, 'id' | 'createdAt'>) => Promise<Event>;
+  updateEvent: (id: string, patch: Partial<Event>) => Promise<void>;
+  deleteEvent: (id: string) => Promise<void>;
   // Products
-  addProduct: (p: Omit<Product, 'id'>) => Product;
-  updateProduct: (id: string, patch: Partial<Product>) => void;
-  deleteProduct: (id: string) => void;
+  addProduct: (p: Omit<Product, 'id'>) => Promise<Product>;
+  updateProduct: (id: string, patch: Partial<Product>) => Promise<void>;
+  deleteProduct: (id: string) => Promise<void>;
   // Materials
-  addMaterial: (m: Omit<Material, 'id'>) => Material;
-  updateMaterial: (id: string, patch: Partial<Material>) => void;
-  deleteMaterial: (id: string) => void;
+  addMaterial: (m: Omit<Material, 'id'>) => Promise<Material>;
+  updateMaterial: (id: string, patch: Partial<Material>) => Promise<void>;
+  deleteMaterial: (id: string) => Promise<void>;
   // Promotions
-  addPromotion: (p: Omit<Promotion, 'id'>) => Promotion;
-  updatePromotion: (id: string, patch: Partial<Promotion>) => void;
-  deletePromotion: (id: string) => void;
+  addPromotion: (p: Omit<Promotion, 'id'>) => Promise<Promotion>;
+  updatePromotion: (id: string, patch: Partial<Promotion>) => Promise<void>;
+  deletePromotion: (id: string) => Promise<void>;
   // Orders
   createOrder: (input: {
     eventId: string;
@@ -57,124 +76,264 @@ interface StoreContextValue {
     promotionId?: string;
     paymentMethod: PaymentMethod;
     paid: boolean;
-  }) => Order;
-  updateOrderStatus: (id: string, status: OrderStatus) => void;
-  markPaid: (id: string, method: PaymentMethod) => void;
-  deleteOrder: (id: string) => void;
+  }) => Promise<Order>;
+  updateOrderStatus: (id: string, status: OrderStatus) => Promise<void>;
+  markPaid: (id: string, method: PaymentMethod) => Promise<void>;
+  deleteOrder: (id: string) => Promise<void>;
 }
+
+const emptyData: AppData = {
+  events: [],
+  products: [],
+  materials: [],
+  promotions: [],
+  orders: [],
+  orderCounter: {},
+};
 
 const StoreContext = createContext<StoreContextValue | null>(null);
 
 export function StoreProvider({ children }: { children: ReactNode }) {
-  const [data, setData] = useState<AppData>(() => loadData());
+  const cloudEnabled = isCloudEnabled;
+  const [data, setData] = useState<AppData>(() =>
+    cloudEnabled ? emptyData : loadData(),
+  );
   const [authenticated, setAuth] = useState(() => isAuthenticated());
+  const [syncReady, setSyncReady] = useState(!cloudEnabled);
+  const [syncError, setSyncError] = useState<string | null>(null);
 
+  // Persistencia local solo si no hay nube
   useEffect(() => {
-    saveData(data);
-  }, [data]);
+    if (!cloudEnabled) saveData(data);
+  }, [cloudEnabled, data]);
 
-  const login = useCallback((password: string) => {
-    if (password === PASSWORD) {
-      setAuthenticated(true);
-      setAuth(true);
-      return true;
+  // Suscripción Firestore cuando hay sesión
+  useEffect(() => {
+    if (!cloudEnabled || !authenticated) {
+      setSyncReady(!cloudEnabled);
+      return;
     }
-    return false;
-  }, []);
 
-  const logout = useCallback(() => {
+    let unsub: (() => void) | undefined;
+    let cancelled = false;
+
+    (async () => {
+      try {
+        await cloudLogin();
+        await ensureSeeded();
+        if (cancelled) return;
+        unsub = subscribeAppData(
+          (next) => {
+            setData(next);
+            setSyncReady(true);
+            setSyncError(null);
+          },
+          (error) => {
+            setSyncError(error.message);
+            setSyncReady(false);
+          },
+        );
+      } catch (error) {
+        setSyncError(
+          error instanceof Error ? error.message : 'Error de sincronización',
+        );
+        setSyncReady(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+      unsub?.();
+    };
+  }, [cloudEnabled, authenticated]);
+
+  const login = useCallback(async (password: string) => {
+    if (password !== PASSWORD) return false;
+    if (cloudEnabled) {
+      try {
+        await cloudLogin();
+      } catch {
+        return false;
+      }
+    }
+    setAuthenticated(true);
+    setAuth(true);
+    return true;
+  }, [cloudEnabled]);
+
+  const logout = useCallback(async () => {
+    if (cloudEnabled) await cloudLogout();
     setAuthenticated(false);
     setAuth(false);
-  }, []);
+    if (cloudEnabled) {
+      setData(emptyData);
+      setSyncReady(false);
+    }
+  }, [cloudEnabled]);
 
-  const addEvent = useCallback((e: Omit<Event, 'id' | 'createdAt'>) => {
-    const event: Event = {
-      ...e,
-      materialsUsed: e.materialsUsed || [],
-      id: uid('evt'),
-      createdAt: new Date().toISOString(),
-    };
-    setData((prev) => ({ ...prev, events: [event, ...prev.events] }));
-    return event;
-  }, []);
-
-  const updateEvent = useCallback((id: string, patch: Partial<Event>) => {
-    setData((prev) => ({
-      ...prev,
-      events: prev.events.map((e) => (e.id === id ? { ...e, ...patch } : e)),
-    }));
-  }, []);
-
-  const deleteEvent = useCallback((id: string) => {
-    setData((prev) => {
-      const { [id]: _removed, ...orderCounter } = prev.orderCounter;
-      return {
-        ...prev,
-        events: prev.events.filter((e) => e.id !== id),
-        orders: prev.orders.filter((o) => o.eventId !== id),
-        orderCounter,
+  const addEvent = useCallback(
+    async (e: Omit<Event, 'id' | 'createdAt'>) => {
+      const event: Event = {
+        ...e,
+        materialsUsed: e.materialsUsed || [],
+        id: uid('evt'),
+        createdAt: new Date().toISOString(),
       };
-    });
-  }, []);
+      if (cloudEnabled) {
+        await upsertEvent(event);
+      } else {
+        setData((prev) => ({ ...prev, events: [event, ...prev.events] }));
+      }
+      return event;
+    },
+    [cloudEnabled],
+  );
 
-  const addProduct = useCallback((p: Omit<Product, 'id'>) => {
-    const product: Product = { ...p, id: uid('prod') };
-    setData((prev) => ({ ...prev, products: [product, ...prev.products] }));
-    return product;
-  }, []);
+  const updateEvent = useCallback(
+    async (id: string, patch: Partial<Event>) => {
+      if (cloudEnabled) {
+        const current = data.events.find((e) => e.id === id);
+        if (!current) return;
+        await upsertEvent({ ...current, ...patch });
+        return;
+      }
+      setData((prev) => ({
+        ...prev,
+        events: prev.events.map((e) => (e.id === id ? { ...e, ...patch } : e)),
+      }));
+    },
+    [cloudEnabled, data.events],
+  );
 
-  const updateProduct = useCallback((id: string, patch: Partial<Product>) => {
-    setData((prev) => ({
-      ...prev,
-      products: prev.products.map((p) =>
-        p.id === id ? { ...p, ...patch } : p,
-      ),
-    }));
-  }, []);
+  const deleteEvent = useCallback(
+    async (id: string) => {
+      if (cloudEnabled) {
+        await removeEvent(id);
+        return;
+      }
+      setData((prev) => {
+        const { [id]: _removed, ...orderCounter } = prev.orderCounter;
+        return {
+          ...prev,
+          events: prev.events.filter((e) => e.id !== id),
+          orders: prev.orders.filter((o) => o.eventId !== id),
+          orderCounter,
+        };
+      });
+    },
+    [cloudEnabled],
+  );
 
-  const deleteProduct = useCallback((id: string) => {
-    setData((prev) => ({
-      ...prev,
-      products: prev.products.filter((p) => p.id !== id),
-    }));
-  }, []);
+  const addProduct = useCallback(
+    async (p: Omit<Product, 'id'>) => {
+      const product: Product = { ...p, id: uid('prod') };
+      if (cloudEnabled) await upsertProduct(product);
+      else setData((prev) => ({ ...prev, products: [product, ...prev.products] }));
+      return product;
+    },
+    [cloudEnabled],
+  );
 
-  const addMaterial = useCallback((m: Omit<Material, 'id'>) => {
-    const material: Material = { ...m, id: uid('mat') };
-    setData((prev) => ({
-      ...prev,
-      materials: [material, ...prev.materials],
-    }));
-    return material;
-  }, []);
+  const updateProduct = useCallback(
+    async (id: string, patch: Partial<Product>) => {
+      if (cloudEnabled) {
+        const current = data.products.find((p) => p.id === id);
+        if (!current) return;
+        await upsertProduct({ ...current, ...patch });
+        return;
+      }
+      setData((prev) => ({
+        ...prev,
+        products: prev.products.map((p) =>
+          p.id === id ? { ...p, ...patch } : p,
+        ),
+      }));
+    },
+    [cloudEnabled, data.products],
+  );
 
-  const updateMaterial = useCallback((id: string, patch: Partial<Material>) => {
-    setData((prev) => ({
-      ...prev,
-      materials: prev.materials.map((m) =>
-        m.id === id ? { ...m, ...patch } : m,
-      ),
-    }));
-  }, []);
+  const deleteProduct = useCallback(
+    async (id: string) => {
+      if (cloudEnabled) {
+        await removeProduct(id);
+        return;
+      }
+      setData((prev) => ({
+        ...prev,
+        products: prev.products.filter((p) => p.id !== id),
+      }));
+    },
+    [cloudEnabled],
+  );
 
-  const deleteMaterial = useCallback((id: string) => {
-    setData((prev) => ({
-      ...prev,
-      materials: prev.materials.filter((m) => m.id !== id),
-    }));
-  }, []);
+  const addMaterial = useCallback(
+    async (m: Omit<Material, 'id'>) => {
+      const material: Material = { ...m, id: uid('mat') };
+      if (cloudEnabled) await upsertMaterial(material);
+      else
+        setData((prev) => ({
+          ...prev,
+          materials: [material, ...prev.materials],
+        }));
+      return material;
+    },
+    [cloudEnabled],
+  );
 
-  const addPromotion = useCallback((p: Omit<Promotion, 'id'>) => {
-    const promo: Promotion = { ...p, id: uid('promo') };
-    setData((prev) => ({
-      ...prev,
-      promotions: [promo, ...prev.promotions],
-    }));
-    return promo;
-  }, []);
+  const updateMaterial = useCallback(
+    async (id: string, patch: Partial<Material>) => {
+      if (cloudEnabled) {
+        const current = data.materials.find((m) => m.id === id);
+        if (!current) return;
+        await upsertMaterial({ ...current, ...patch });
+        return;
+      }
+      setData((prev) => ({
+        ...prev,
+        materials: prev.materials.map((m) =>
+          m.id === id ? { ...m, ...patch } : m,
+        ),
+      }));
+    },
+    [cloudEnabled, data.materials],
+  );
+
+  const deleteMaterial = useCallback(
+    async (id: string) => {
+      if (cloudEnabled) {
+        await removeMaterial(id);
+        return;
+      }
+      setData((prev) => ({
+        ...prev,
+        materials: prev.materials.filter((m) => m.id !== id),
+      }));
+    },
+    [cloudEnabled],
+  );
+
+  const addPromotion = useCallback(
+    async (p: Omit<Promotion, 'id'>) => {
+      const promo: Promotion = { ...p, id: uid('promo') };
+      if (cloudEnabled) await upsertPromotion(promo);
+      else
+        setData((prev) => ({
+          ...prev,
+          promotions: [promo, ...prev.promotions],
+        }));
+      return promo;
+    },
+    [cloudEnabled],
+  );
 
   const updatePromotion = useCallback(
-    (id: string, patch: Partial<Promotion>) => {
+    async (id: string, patch: Partial<Promotion>) => {
+      if (cloudEnabled) {
+        const current = data.promotions.find((p) => p.id === id);
+        if (!current) return;
+        await upsertPromotion({ ...current, ...patch });
+        return;
+      }
       setData((prev) => ({
         ...prev,
         promotions: prev.promotions.map((p) =>
@@ -182,18 +341,25 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         ),
       }));
     },
-    [],
+    [cloudEnabled, data.promotions],
   );
 
-  const deletePromotion = useCallback((id: string) => {
-    setData((prev) => ({
-      ...prev,
-      promotions: prev.promotions.filter((p) => p.id !== id),
-    }));
-  }, []);
+  const deletePromotion = useCallback(
+    async (id: string) => {
+      if (cloudEnabled) {
+        await removePromotion(id);
+        return;
+      }
+      setData((prev) => ({
+        ...prev,
+        promotions: prev.promotions.filter((p) => p.id !== id),
+      }));
+    },
+    [cloudEnabled],
+  );
 
   const createOrder = useCallback(
-    (input: {
+    async (input: {
       eventId: string;
       customerName: string;
       lines: OrderLine[];
@@ -201,30 +367,39 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       paymentMethod: PaymentMethod;
       paid: boolean;
     }) => {
+      const promo = data.promotions.find((p) => p.id === input.promotionId);
+      const subtotal = calcSubtotal(input.lines);
+      const discount = calcDiscount(input.lines, promo);
+      const total = round2(Math.max(0, subtotal - discount));
+      const now = new Date().toISOString();
+      const base = {
+        id: uid('ord'),
+        eventId: input.eventId,
+        customerName: input.customerName.trim(),
+        lines: input.lines,
+        subtotal,
+        discount,
+        total,
+        promotionId: promo?.id,
+        promotionName: promo?.name,
+        paymentMethod: input.paymentMethod,
+        paid: input.paid && input.paymentMethod !== 'pendiente',
+        status: 'pendiente' as const,
+        createdAt: now,
+        updatedAt: now,
+      };
+
+      if (cloudEnabled) {
+        return createOrderAtomic(base);
+      }
+
       let created!: Order;
       setData((prev) => {
         const number = nextOrderNumber(prev, input.eventId);
-        const promo = prev.promotions.find((p) => p.id === input.promotionId);
-        const subtotal = calcSubtotal(input.lines);
-        const discount = calcDiscount(input.lines, promo);
-        const total = round2(Math.max(0, subtotal - discount));
-        const now = new Date().toISOString();
         created = {
-          id: uid('ord'),
+          ...base,
           number,
-          eventId: input.eventId,
-          customerName: input.customerName.trim() || `Cliente #${number}`,
-          lines: input.lines,
-          subtotal,
-          discount,
-          total,
-          promotionId: promo?.id,
-          promotionName: promo?.name,
-          paymentMethod: input.paymentMethod,
-          paid: input.paid && input.paymentMethod !== 'pendiente',
-          status: 'pendiente',
-          createdAt: now,
-          updatedAt: now,
+          customerName: base.customerName || `Cliente #${number}`,
         };
         return {
           ...prev,
@@ -237,85 +412,104 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       });
       return created;
     },
-    [],
+    [cloudEnabled, data.promotions],
   );
 
-  const updateOrderStatus = useCallback((id: string, status: OrderStatus) => {
-    setData((prev) => ({
-      ...prev,
-      orders: prev.orders.map((o) => {
-        if (o.id !== id) return o;
-        const now = new Date().toISOString();
-        return {
-          ...o,
-          status,
-          updatedAt: now,
-          deliveredAt: status === 'entregado' ? now : o.deliveredAt,
-        };
-      }),
-    }));
-  }, []);
+  const updateOrderStatus = useCallback(
+    async (id: string, status: OrderStatus) => {
+      const current = data.orders.find((o) => o.id === id);
+      if (!current) return;
+      const now = new Date().toISOString();
+      const next: Order = {
+        ...current,
+        status,
+        updatedAt: now,
+        deliveredAt: status === 'entregado' ? now : current.deliveredAt,
+      };
+      if (cloudEnabled) await upsertOrder(next);
+      else
+        setData((prev) => ({
+          ...prev,
+          orders: prev.orders.map((o) => (o.id === id ? next : o)),
+        }));
+    },
+    [cloudEnabled, data.orders],
+  );
 
-  const markPaid = useCallback((id: string, method: PaymentMethod) => {
-    setData((prev) => ({
-      ...prev,
-      orders: prev.orders.map((o) =>
-        o.id === id
-          ? {
-              ...o,
-              paid: method !== 'pendiente',
-              paymentMethod: method,
-              updatedAt: new Date().toISOString(),
-            }
-          : o,
-      ),
-    }));
-  }, []);
+  const markPaid = useCallback(
+    async (id: string, method: PaymentMethod) => {
+      const current = data.orders.find((o) => o.id === id);
+      if (!current) return;
+      const next: Order = {
+        ...current,
+        paid: method !== 'pendiente',
+        paymentMethod: method,
+        updatedAt: new Date().toISOString(),
+      };
+      if (cloudEnabled) await upsertOrder(next);
+      else
+        setData((prev) => ({
+          ...prev,
+          orders: prev.orders.map((o) => (o.id === id ? next : o)),
+        }));
+    },
+    [cloudEnabled, data.orders],
+  );
 
-  const deleteOrder = useCallback((id: string) => {
-    setData((prev) => {
-      const removed = prev.orders.find((order) => order.id === id);
-      if (!removed) return prev;
+  const deleteOrder = useCallback(
+    async (id: string) => {
+      if (cloudEnabled) {
+        await removeOrderAndRenumber(id, data.orders);
+        return;
+      }
+      setData((prev) => {
+        const removed = prev.orders.find((order) => order.id === id);
+        if (!removed) return prev;
 
-      const remaining = prev.orders.filter((order) => order.id !== id);
-      const eventOrders = remaining
-        .filter((order) => order.eventId === removed.eventId)
-        .sort(
-          (a, b) =>
-            new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
+        const remaining = prev.orders.filter((order) => order.id !== id);
+        const eventOrders = remaining
+          .filter((order) => order.eventId === removed.eventId)
+          .sort(
+            (a, b) =>
+              new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
+          );
+        const numberById = new Map(
+          eventOrders.map((order, index) => [order.id, index + 1]),
         );
-      const numberById = new Map(
-        eventOrders.map((order, index) => [order.id, index + 1]),
-      );
-      const orders = remaining.map((order) => {
-        const number = numberById.get(order.id);
-        if (!number) return order;
-        const defaultCustomer = `Cliente #${order.number}`;
+        const orders = remaining.map((order) => {
+          const number = numberById.get(order.id);
+          if (!number) return order;
+          const defaultCustomer = `Cliente #${order.number}`;
+          return {
+            ...order,
+            number,
+            customerName:
+              order.customerName === defaultCustomer
+                ? `Cliente #${number}`
+                : order.customerName,
+          };
+        });
+
         return {
-          ...order,
-          number,
-          customerName:
-            order.customerName === defaultCustomer
-              ? `Cliente #${number}`
-              : order.customerName,
+          ...prev,
+          orders,
+          orderCounter: {
+            ...prev.orderCounter,
+            [removed.eventId]: eventOrders.length,
+          },
         };
       });
-
-      return {
-        ...prev,
-        orders,
-        orderCounter: {
-          ...prev.orderCounter,
-          [removed.eventId]: eventOrders.length,
-        },
-      };
-    });
-  }, []);
+    },
+    [cloudEnabled, data.orders],
+  );
 
   const value = useMemo(
     () => ({
       data,
       authenticated,
+      syncReady,
+      syncError,
+      cloudEnabled,
       login,
       logout,
       addEvent,
@@ -338,6 +532,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     [
       data,
       authenticated,
+      syncReady,
+      syncError,
+      cloudEnabled,
       login,
       logout,
       addEvent,

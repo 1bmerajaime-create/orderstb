@@ -121,9 +121,9 @@ export function NewOrderPage() {
     setBowls((current) => current.filter((_, i) => i !== removeIndex));
   }
 
-  function submit() {
+  async function submit() {
     if (lines.length === 0 || !allComplete) return;
-    createOrder({
+    await createOrder({
       eventId: event!.id,
       customerName,
       lines,

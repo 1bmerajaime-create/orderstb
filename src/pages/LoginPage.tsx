@@ -4,19 +4,30 @@ import { useStore } from '../lib/store';
 import logoVerticalUrl from '../assets/logo-vertical.png';
 
 export function LoginPage() {
-  const { login, authenticated } = useStore();
+  const { login, authenticated, cloudEnabled } = useStore();
   const navigate = useNavigate();
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
 
   if (authenticated) return <Navigate to="/" replace />;
 
-  function onSubmit(e: FormEvent) {
+  async function onSubmit(e: FormEvent) {
     e.preventDefault();
-    if (login(password)) {
-      navigate('/');
-    } else {
-      setError('Contraseña incorrecta');
+    setLoading(true);
+    setError('');
+    try {
+      const ok = await login(password);
+      if (ok) navigate('/');
+      else setError('Contraseña incorrecta');
+    } catch {
+      setError(
+        cloudEnabled
+          ? 'No se pudo conectar con la nube. Revisa la configuración de Firebase.'
+          : 'Contraseña incorrecta',
+      );
+    } finally {
+      setLoading(false);
     }
   }
 
@@ -38,6 +49,7 @@ export function LoginPage() {
             autoComplete="current-password"
             placeholder="Introduce la contraseña"
             value={password}
+            disabled={loading}
             onChange={(e) => {
               setPassword(e.target.value);
               setError('');
@@ -45,12 +57,18 @@ export function LoginPage() {
           />
         </div>
         {error && <p className="login-error">{error}</p>}
-        <button type="submit" className="btn btn-primary btn-lg btn-block">
-          Entrar
+        <button
+          type="submit"
+          className="btn btn-primary btn-lg btn-block"
+          disabled={loading}
+        >
+          {loading ? 'Entrando…' : 'Entrar'}
         </button>
         <p className="hint-note">
-          Solo el equipo Tropic Boost. En futuras versiones habrá perfiles
-          (Caja, Cocina, Responsable…).
+          Solo el equipo Tropic Boost.
+          {cloudEnabled
+            ? ' Los datos se sincronizan en tiempo real entre dispositivos.'
+            : ' En futuras versiones habrá perfiles (Caja, Cocina, Responsable…).'}
         </p>
       </form>
     </div>
