@@ -35,6 +35,33 @@ En ambos casos la contraseña es:
 tropic.boost
 ```
 
+## Publicar en pedidostropicboost.com (GitHub Pages + GoDaddy)
+
+Cada push a `main` despliega automáticamente con GitHub Actions.
+
+### 1. DNS en GoDaddy
+
+En el dominio → **DNS** / **Manage DNS**, deja estos registros (borra parking/A viejos de `@` y `www` que choquen):
+
+| Tipo | Nombre | Valor | TTL |
+|------|--------|--------|-----|
+| A | `@` | `185.199.108.153` | 600 |
+| A | `@` | `185.199.109.153` | 600 |
+| A | `@` | `185.199.110.153` | 600 |
+| A | `@` | `185.199.111.153` | 600 |
+| CNAME | `www` | `jaime-aily.github.io` | 600 |
+
+Si GoDaddy tiene **Forwarding** o un A a `Parked`, desactívalo.
+
+### 2. Dominio en GitHub
+
+Repo → **Settings** → **Pages**:
+- Source: **GitHub Actions**
+- Custom domain: `pedidostropicboost.com`
+- Cuando el DNS esté verde, activa **Enforce HTTPS**
+
+La web queda en `https://pedidostropicboost.com` (y `www` si lo apuntaste).
+
 ## Qué incluye
 
 - **Login** con contraseña única
