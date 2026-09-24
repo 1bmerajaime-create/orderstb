@@ -121,8 +121,8 @@ function BowlLineCard({
   const groups = [
     { kind: 'base', label: 'Base', values: [base] },
     { kind: 'fruta', label: 'Fruta', values: config.fruits },
-    { kind: 'blando', label: 'Blando', values: config.softs },
     { kind: 'duro', label: 'Duro', values: config.solids },
+    { kind: 'blando', label: 'Blando', values: config.softs },
     ...(config.whey
       ? [{ kind: 'extra', label: 'Extra', values: [WHEY] }]
       : []),
