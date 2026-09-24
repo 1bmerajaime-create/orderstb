@@ -1,3 +1,4 @@
+import { parseRecipe, WHEY } from './bowl';
 import { IVA_RATE, formatEUR, ivaFromGross, netFromGross, round2 } from './utils';
 import type { Order, OrderLine } from '../types';
 
@@ -36,6 +37,10 @@ export function receiptTotals(order: Order): ReceiptTotals {
   };
 }
 
+export function lineTotal(line: OrderLine): number {
+  return round2(line.unitPrice * line.quantity);
+}
+
 export function buildReceiptText(order: Order, eventName?: string): string {
   const totals = receiptTotals(order);
   const lines = order.lines
@@ -51,20 +56,20 @@ export function buildReceiptText(order: Order, eventName?: string): string {
     `Pago: ${order.paymentMethod}${order.paid ? ' (pagado)' : ''}`,
     order.promotionName ? `Promoción: ${order.promotionName}` : '',
     '',
-    '— Productos —',
+    '— Bowls —',
     lines,
     '',
-    '— Totales (IVA incluido) —',
+    '— Totales pedido (IVA incluido) —',
     `Subtotal: ${formatEUR(totals.subtotal)}`,
     totals.lineDiscounts > 0
-      ? `Descuentos por producto: −${formatEUR(totals.lineDiscounts)}`
+      ? `Descuentos por bowl: −${formatEUR(totals.lineDiscounts)}`
       : '',
     totals.orderDiscount > 0
       ? `Descuento pedido: −${formatEUR(totals.orderDiscount)}`
       : '',
     `Base imponible: ${formatEUR(totals.net)}`,
     `IVA (${Math.round(IVA_RATE * 100)}%): ${formatEUR(totals.iva)}`,
-    `TOTAL: ${formatEUR(totals.total)}`,
+    `TOTAL PEDIDO: ${formatEUR(totals.total)}`,
     '',
     'Gracias por tu pedido · Tropic Boost',
     FROM_EMAIL,
@@ -74,19 +79,34 @@ export function buildReceiptText(order: Order, eventName?: string): string {
 }
 
 function formatLine(line: OrderLine, index: number): string {
-  const base = line.baseUnitPrice ?? line.unitPrice + (line.lineDiscount || 0);
-  const ingredients = (line.ingredients || []).join(', ');
-  const discount =
+  const grossUnit = line.baseUnitPrice ?? line.unitPrice + (line.lineDiscount || 0);
+  const total = lineTotal(line);
+  const ingredients = line.ingredients || [];
+  const config = parseRecipe(ingredients);
+  const base =
+    ingredients.find((item) => /a[cç]a[ií]/i.test(item)) || 'Açaí';
+
+  const detailRows = [
+    `   Base: ${base}`,
+    config.fruits.length ? `   Fruta: ${config.fruits.join(', ')}` : '',
+    config.solids.length ? `   Duro: ${config.solids.join(', ')}` : '',
+    config.softs.length ? `   Blando: ${config.softs.join(', ')}` : '',
+    config.whey ? `   Extra: ${WHEY}` : '',
+  ].filter(Boolean);
+
+  const priceRows = [
+    `   Precio bowl: ${formatEUR(grossUnit)}`,
     line.lineDiscount && line.lineDiscount > 0
-      ? ` (dto.${line.promotionName ? ` ${line.promotionName}` : ''} −${formatEUR(line.lineDiscount)})`
-      : '';
+      ? `   Dto.${line.promotionName ? ` ${line.promotionName}` : ''}: −${formatEUR(line.lineDiscount)}`
+      : '',
+    `   TOTAL BOWL: ${formatEUR(total)}`,
+  ].filter(Boolean);
+
   return [
-    `${index}. ${line.quantity}× ${line.productName}${discount}`,
-    `   Precio: ${formatEUR(base)} → ${formatEUR(line.unitPrice)}`,
-    ingredients ? `   Ingredientes: ${ingredients}` : '',
-  ]
-    .filter(Boolean)
-    .join('\n');
+    `${index}. ${line.quantity}× ${line.productName}`,
+    ...detailRows,
+    ...priceRows,
+  ].join('\n');
 }
 
 async function copyTicket(text: string): Promise<boolean> {
@@ -101,7 +121,6 @@ async function copyTicket(text: string): Promise<boolean> {
 function openUrl(url: string) {
   const opened = window.open(url, '_blank', 'noopener,noreferrer');
   if (opened) return true;
-  // Fallback si el popup se bloquea
   const anchor = document.createElement('a');
   anchor.href = url;
   anchor.target = '_blank';

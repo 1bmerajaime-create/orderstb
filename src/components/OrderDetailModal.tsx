@@ -2,7 +2,7 @@ import { CheckCircle2, Mail, Ticket, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 import { Modal } from './ui';
 import { parseRecipe, WHEY } from '../lib/bowl';
-import { sendReceiptEmail, FROM_EMAIL } from '../lib/receipt';
+import { sendReceiptEmail, FROM_EMAIL, lineTotal } from '../lib/receipt';
 import { useStore } from '../lib/store';
 import {
   formatEUR,
@@ -246,6 +246,12 @@ export function TicketModal({
   return (
     <Modal title={`Ticket #${order.number}`} onClose={onClose}>
       <div className="ticket-panel">
+        <div className="ticket-bowls">
+          {order.lines.map((line, index) => (
+            <TicketBowlRow key={`${line.productId}-${index}`} line={line} index={index + 1} />
+          ))}
+        </div>
+
         <div className="totals totals-inline">
           <div className="totals-row">
             <span>Subtotal</span>
@@ -266,7 +272,7 @@ export function TicketModal({
             <span>{formatEUR(ivaFromGross(order.total))}</span>
           </div>
           <div className="totals-row grand">
-            <span>Total</span>
+            <span>Total pedido</span>
             <span>{formatEUR(order.total)}</span>
           </div>
         </div>
@@ -303,5 +309,51 @@ export function TicketModal({
         </div>
       </div>
     </Modal>
+  );
+}
+
+function TicketBowlRow({ line, index }: { line: OrderLine; index: number }) {
+  const ingredients = line.ingredients || [];
+  const config = parseRecipe(ingredients);
+  const base =
+    ingredients.find((item) => /a[cç]a[ií]/i.test(item)) || 'Açaí';
+  const grossUnit =
+    line.baseUnitPrice ?? line.unitPrice + (line.lineDiscount || 0);
+  const total = lineTotal(line);
+
+  return (
+    <article className="ticket-bowl">
+      <div className="ticket-bowl-head">
+        <strong>
+          {index}. {line.quantity}× {line.productName}
+        </strong>
+        <span>{formatEUR(total)}</span>
+      </div>
+      <ul className="ticket-bowl-details">
+        <li>Base: {base}</li>
+        {config.fruits.length > 0 && (
+          <li>Fruta: {config.fruits.join(', ')}</li>
+        )}
+        {config.solids.length > 0 && (
+          <li>Duro: {config.solids.join(', ')}</li>
+        )}
+        {config.softs.length > 0 && (
+          <li>Blando: {config.softs.join(', ')}</li>
+        )}
+        {config.whey && <li>Extra: {WHEY}</li>}
+        {(line.lineDiscount || 0) > 0 && (
+          <li>
+            Dto.{line.promotionName ? ` ${line.promotionName}` : ''}: −
+            {formatEUR(line.lineDiscount || 0)}
+            {grossUnit !== line.unitPrice &&
+              ` (${formatEUR(grossUnit)} → ${formatEUR(line.unitPrice)})`}
+          </li>
+        )}
+      </ul>
+      <div className="ticket-bowl-total">
+        <span>Total bowl</span>
+        <strong>{formatEUR(total)}</strong>
+      </div>
+    </article>
   );
 }

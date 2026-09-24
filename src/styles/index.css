@@ -2418,6 +2418,61 @@ tbody tr.row-clickable:hover td {
   font-size: 0.78rem;
 }
 
+.ticket-bowls {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+}
+
+.ticket-bowl {
+  padding: 0.65rem 0.75rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid rgba(168, 85, 224, 0.28);
+  background: rgba(14, 6, 24, 0.35);
+}
+
+.ticket-bowl-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+  align-items: baseline;
+}
+
+.ticket-bowl-head strong {
+  font-size: 0.92rem;
+}
+
+.ticket-bowl-head > span {
+  font-weight: 800;
+  color: var(--lavender-bright);
+  white-space: nowrap;
+}
+
+.ticket-bowl-details {
+  list-style: none;
+  margin: 0.4rem 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  color: var(--ink-soft);
+  font-size: 0.78rem;
+}
+
+.ticket-bowl-total {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 0.45rem;
+  padding-top: 0.4rem;
+  border-top: 1px dashed rgba(168, 85, 224, 0.25);
+  font-size: 0.82rem;
+}
+
+.ticket-bowl-total strong {
+  font-size: 0.95rem;
+}
+
 .order-detail-line-head {
   display: flex;
   justify-content: space-between;
