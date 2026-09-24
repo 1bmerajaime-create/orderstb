@@ -122,42 +122,128 @@ function openUrl(url: string) {
   return true;
 }
 
-/** Genera el PDF del ticket, lo descarga y abre Gmail para adjuntarlo. */
-export async function sendReceiptEmail(input: {
-  to: string;
-  order: Order;
-  eventName?: string;
-}): Promise<{ ok: boolean; mode: 'gmail' | 'mailto'; message: string }> {
-  const { buildReceiptPdf, downloadPdfBlob } = await import('./receiptPdf');
-  const { blob, filename } = await buildReceiptPdf(input.order, input.eventName);
-  downloadPdfBlob(blob, filename);
+async function blobToBase64(blob: Blob): Promise<string> {
+  const buffer = await blob.arrayBuffer();
+  const bytes = new Uint8Array(buffer);
+  let binary = '';
+  const chunk = 0x8000;
+  for (let i = 0; i < bytes.length; i += chunk) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + chunk));
+  }
+  return btoa(binary);
+}
 
-  const subject = `Tropic Boost · Ticket pedido #${input.order.number}`;
-  const body = [
-    `Hola${input.order.customerName ? ` ${input.order.customerName}` : ''},`,
+function emailBody(order: Order, filename: string): string {
+  return [
+    `Hola${order.customerName ? ` ${order.customerName}` : ''},`,
     '',
-    `Adjunto el ticket PDF de tu pedido #${input.order.number} (Total: ${formatEUR(input.order.total)}).`,
+    `Adjuntamos el ticket PDF de tu pedido #${order.number} (Total: ${formatEUR(order.total)}).`,
     '',
     '¡Gracias por pedir en Tropic Boost!',
     FROM_EMAIL,
     '',
-    '—',
     `Archivo: ${filename}`,
-    '(Adjunta el PDF descargado antes de enviar)',
   ].join('\n');
+}
 
+/**
+ * Envía el ticket PDF.
+ * 1) Google Apps Script (automático, con adjunto) si está configurado
+ * 2) Compartir nativo del dispositivo (PDF adjunto) si el SO lo permite
+ * 3) Fallback: descarga PDF + abre Gmail (hay que adjuntar a mano)
+ */
+export async function sendReceiptEmail(input: {
+  to: string;
+  order: Order;
+  eventName?: string;
+}): Promise<{
+  ok: boolean;
+  mode: 'apps-script' | 'share' | 'gmail' | 'mailto';
+  message: string;
+}> {
+  const { buildReceiptPdf, downloadPdfBlob } = await import('./receiptPdf');
+  const { blob, filename } = await buildReceiptPdf(input.order, input.eventName);
+  const subject = `Tropic Boost · Ticket pedido #${input.order.number}`;
+  const body = emailBody(input.order, filename);
+  const scriptUrl = import.meta.env.VITE_GMAIL_SCRIPT_URL as string | undefined;
+  const scriptSecret = (import.meta.env.VITE_GMAIL_SCRIPT_SECRET as string | undefined) || '';
+
+  // 1) Envío automático real desde Gmail (Apps Script)
+  if (scriptUrl) {
+    const pdfBase64 = await blobToBase64(blob);
+    const payload = JSON.stringify({
+      secret: scriptSecret,
+      to: input.to,
+      subject,
+      body,
+      filename,
+      pdfBase64,
+    });
+
+    try {
+      const response = await fetch(scriptUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: payload,
+      });
+      const result = (await response.json().catch(() => null)) as
+        | { ok?: boolean; error?: string }
+        | null;
+      if (!response.ok || !result?.ok) {
+        throw new Error(result?.error || 'No se pudo enviar el ticket automáticamente');
+      }
+      return {
+        ok: true,
+        mode: 'apps-script',
+        message: `Ticket PDF enviado a ${input.to} desde ${FROM_EMAIL}.`,
+      };
+    } catch {
+      // Apps Script a veces falla CORS en la respuesta; el envío puede haberse hecho.
+      await fetch(scriptUrl, {
+        method: 'POST',
+        mode: 'no-cors',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: payload,
+      });
+      return {
+        ok: true,
+        mode: 'apps-script',
+        message: `Ticket PDF enviado a ${input.to} desde ${FROM_EMAIL}. Si no llega, revisa spam o el script.`,
+      };
+    }
+  }
+
+  // 2) Compartir nativo (iPad/móvil: Gmail/Mail con PDF adjunto)
+  const file = new File([blob], filename, { type: 'application/pdf' });
+  const canShareFiles =
+    typeof navigator.canShare === 'function' && navigator.canShare({ files: [file] });
+  if (canShareFiles && typeof navigator.share === 'function') {
+    await navigator.share({
+      files: [file],
+      title: subject,
+      text: body,
+    });
+    return {
+      ok: true,
+      mode: 'share',
+      message: 'Elige Gmail o Mail: el PDF ya va adjunto.',
+    };
+  }
+
+  // 3) Fallback escritorio sin script: descarga + Gmail
+  downloadPdfBlob(blob, filename);
   const gmailUrl =
     'https://mail.google.com/mail/?view=cm&fs=1&tf=1' +
     `&to=${encodeURIComponent(input.to)}` +
     `&su=${encodeURIComponent(subject)}` +
-    `&body=${encodeURIComponent(body)}`;
+    `&body=${encodeURIComponent(body + '\n\n(Adjunta el PDF descargado antes de enviar)')}`;
 
   try {
     openUrl(gmailUrl);
     return {
       ok: true,
       mode: 'gmail',
-      message: `PDF descargado (${filename}). Adjúntalo en Gmail y pulsa Enviar desde ${FROM_EMAIL}.`,
+      message: `PDF descargado (${filename}). En escritorio Gmail no deja adjuntar solo: adjúntalo y envía desde ${FROM_EMAIL}. Para envío automático, configura el Apps Script (ver google-apps-script/).`,
     };
   } catch {
     const mailto = `mailto:${encodeURIComponent(input.to)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
@@ -178,4 +264,8 @@ export async function downloadReceiptPdf(input: {
   const { blob, filename } = await buildReceiptPdf(input.order, input.eventName);
   downloadPdfBlob(blob, filename);
   return { filename };
+}
+
+export function hasAutomaticTicketSend(): boolean {
+  return Boolean(import.meta.env.VITE_GMAIL_SCRIPT_URL);
 }

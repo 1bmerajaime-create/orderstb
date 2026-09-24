@@ -96,13 +96,31 @@ Repo → **Settings** → **Secrets and variables** → **Actions** → crea:
 
 Tras el siguiente push/deploy, todos los dispositivos compartirán la misma nube.
 
-## Ticket por email (Gmail)
+## Ticket PDF por email
 
-No hace falta EmailJS. Al enviar el ticket, la app abre **Gmail** con el recibo
-ya escrito (productos, descuentos, base e IVA) dirigido al cliente.
+El ticket se genera en PDF en el navegador.
 
-En el dispositivo de caja inicia sesión en Gmail con `info.tropicboost@gmail.com`,
-pulsa «Abrir en Gmail» y luego **Enviar**.
+### Envío automático (recomendado)
+
+Gmail web **no permite** adjuntar archivos solo desde una web. Para que salga
+solo, con PDF adjunto desde `info.tropicboost@gmail.com`:
+
+1. Abre [script.google.com](https://script.google.com) con esa cuenta
+2. Nuevo proyecto y pega `google-apps-script/SendTicket.gs`
+3. **Implementar** → **Aplicación web**
+   - Ejecutar como: Yo
+   - Quién tiene acceso: Cualquiera
+4. Copia la URL (`…/exec`)
+5. Añade secrets en GitHub (y `.env` local):
+
+```
+VITE_GMAIL_SCRIPT_URL=https://script.google.com/macros/s/XXXX/exec
+VITE_GMAIL_SCRIPT_SECRET=tropic-boost-ticket
+```
+
+6. Push / redeploy
+
+En iPad/móvil, si no hay script, al enviar se abre el menú **Compartir** con el PDF ya adjunto.
 
 ## Qué incluye
 
@@ -110,10 +128,10 @@ pulsa «Abrir en Gmail» y luego **Enviar**.
 - **Dashboard principal**: eventos, productos, materia prima, promociones
 - **Dashboard del evento**: KPIs, ventas por hora, top productos
 - **TPV de pedidos**: modal de toppings (duros / blandos / frutas), límites y extras
-- **Descuentos** por bowl y por pedido; ticket con IVA vía Gmail
+- **Descuentos** por bowl ligados a promociones; ticket PDF
 - **Histórico** con filtros
 - **Sync en tiempo real** entre dispositivos (Firebase Firestore) o `localStorage` si no hay config
 
 ## Stack
 
-Vite · React · TypeScript · React Router · Recharts · Firebase
+Vite · React · TypeScript · React Router · Recharts · Firebase · jsPDF

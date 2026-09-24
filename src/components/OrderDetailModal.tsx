@@ -7,6 +7,7 @@ import {
   downloadReceiptPdf,
   FROM_EMAIL,
   lineTotal,
+  hasAutomaticTicketSend,
 } from '../lib/receipt';
 import { useStore } from '../lib/store';
 import {
@@ -312,8 +313,9 @@ export function TicketModal({
 
         {emailNote && <p className="builder-status complete">{emailNote}</p>}
         <p className="muted ticket-hint">
-          Se descarga el ticket en PDF. En Gmail adjúntalo y envíalo desde{' '}
-          {FROM_EMAIL}.
+          {hasAutomaticTicketSend()
+            ? `Envío automático del PDF desde ${FROM_EMAIL}.`
+            : `En iPad/móvil el PDF se puede compartir ya adjunto. En escritorio, sin Apps Script, hay que adjuntarlo a mano.`}
         </p>
 
         <div className="modal-actions ticket-actions">
@@ -334,7 +336,12 @@ export function TicketModal({
             disabled={sending}
             onClick={handleSend}
           >
-            <Mail size={16} /> {sending ? 'Preparando…' : 'PDF + Gmail'}
+            <Mail size={16} />{' '}
+            {sending
+              ? 'Enviando…'
+              : hasAutomaticTicketSend()
+                ? 'Enviar PDF'
+                : 'Enviar ticket'}
           </button>
         </div>
       </div>
