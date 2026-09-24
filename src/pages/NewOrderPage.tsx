@@ -1,46 +1,50 @@
-import { Minus, Pencil, Plus, Trash2, X } from 'lucide-react';
+import { Mail, Minus, Pencil, Plus, Trash2, X } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { Navigate, useNavigate, useParams } from 'react-router-dom';
 import { Modal } from '../components/ui';
+import {
+  CUSTOM_PRODUCT_ID,
+  FREE_FRUITS,
+  FREE_SOFT,
+  FREE_SOLID,
+  FRUITS,
+  PISTACHIO,
+  SOLID_TOPPINGS,
+  SOFT_TOPPINGS,
+  WHEY_PRICE,
+  bowlGrossPrice,
+  bowlIngredients,
+  bowlNetPrice,
+  bowlSurcharges,
+  isBowlComplete,
+  isPaidExtra,
+  lineDiscountAmount,
+  parseRecipe,
+  toggleInList,
+  type BowlConfig,
+  type LineDiscountType,
+} from '../lib/bowl';
+import { sendReceiptEmail } from '../lib/receipt';
 import { useStore } from '../lib/store';
-import { calcDiscount, calcSubtotal, formatEUR, round2, uid } from '../lib/utils';
+import {
+  calcDiscount,
+  calcSubtotal,
+  formatEUR,
+  ivaFromGross,
+  netFromGross,
+  round2,
+  uid,
+} from '../lib/utils';
 import type { OrderLine, PaymentMethod, Product } from '../types';
 
-const SOLID_TOPPINGS = [
-  'Granola',
-  'Almendra crocanti',
-  'Lotus',
-  'Coco rallado',
-  'Galleta',
-  'Choco chips',
-];
-const SOFT_TOPPINGS = [
-  'Crema de cacahuete',
-  'Miel',
-  'Caramelo',
-  'Crema de pistacho',
-];
-const FRUITS = ['Plátano', 'Mango', 'Fresa', 'Arándanos'];
-const CUSTOM_PRODUCT_ID = 'prod-custom';
-const EDITABLE_INGREDIENTS = [
-  ...SOLID_TOPPINGS,
-  ...SOFT_TOPPINGS,
-  ...FRUITS,
-  'Proteína whey',
-];
-
-interface DraftBowl {
+interface DraftBowl extends BowlConfig {
   id: string;
   productId: string;
   productName: string;
   basePrice: number;
-  baseIngredients: string[];
-  ingredients: string[];
-  solid: string;
-  soft: string;
-  fruits: string[];
-  extras: string[];
-  whey: boolean;
+  baseRecipe: BowlConfig;
+  discountType: LineDiscountType;
+  discountValue: number;
 }
 
 export function NewOrderPage() {
@@ -50,53 +54,99 @@ export function NewOrderPage() {
   const event = data.events.find((e) => e.id === eventId);
 
   const [customerName, setCustomerName] = useState('');
+  const [customerEmail, setCustomerEmail] = useState('');
+  const [sendEmail, setSendEmail] = useState(false);
   const [bowls, setBowls] = useState<DraftBowl[]>([]);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [promotionId, setPromotionId] = useState('');
+  const [orderDiscountType, setOrderDiscountType] =
+    useState<LineDiscountType>('none');
+  const [orderDiscountValue, setOrderDiscountValue] = useState(0);
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('tarjeta');
+  const [submitting, setSubmitting] = useState(false);
+  const [emailNote, setEmailNote] = useState('');
 
   const editingBowl = bowls.find((bowl) => bowl.id === editingId) || null;
 
   const lines: OrderLine[] = useMemo(
     () =>
-      bowls.map((bowl) => ({
-        productId: bowl.productId,
-        productName: bowl.productName,
-        quantity: 1,
-        unitPrice: bowlPrice(bowl),
-        ingredients:
-          bowl.productId === CUSTOM_PRODUCT_ID
-            ? customIngredients(bowl)
-            : bowl.ingredients,
-        customized: bowl.productId !== CUSTOM_PRODUCT_ID && isCustomized(bowl),
-      })),
+      bowls.map((bowl) => {
+        const config: BowlConfig = {
+          solids: bowl.solids,
+          softs: bowl.softs,
+          fruits: bowl.fruits,
+          whey: bowl.whey,
+        };
+        const gross = bowlGrossPrice(bowl.basePrice, config);
+        const discount = lineDiscountAmount(
+          gross,
+          bowl.discountType,
+          bowl.discountValue,
+        );
+        const net = bowlNetPrice(
+          bowl.basePrice,
+          config,
+          bowl.discountType,
+          bowl.discountValue,
+        );
+        return {
+          productId: bowl.productId,
+          productName: bowl.productName,
+          quantity: 1,
+          unitPrice: net,
+          baseUnitPrice: gross,
+          lineDiscount: discount,
+          ingredients: bowlIngredients(config),
+          customized:
+            bowl.productId !== CUSTOM_PRODUCT_ID && isCustomized(bowl),
+        };
+      }),
     [bowls],
   );
 
   const promo = data.promotions.find((item) => item.id === promotionId);
   const subtotal = calcSubtotal(lines);
-  const discount = calcDiscount(lines, promo);
+  const promoDiscount = calcDiscount(lines, promo);
+  const manualOrderDiscount = lineDiscountAmount(
+    Math.max(0, subtotal - promoDiscount),
+    orderDiscountType,
+    orderDiscountValue,
+  );
+  const discount = round2(
+    Math.min(subtotal, promoDiscount + manualOrderDiscount),
+  );
   const total = round2(Math.max(0, subtotal - discount));
-  const allComplete = bowls.every(isComplete);
+  const allComplete = bowls.every((bowl) =>
+    isBowlComplete({
+      solids: bowl.solids,
+      softs: bowl.softs,
+      fruits: bowl.fruits,
+      whey: bowl.whey,
+    }),
+  );
 
   if (!event) return <Navigate to="/" replace />;
 
   function addBowl(product: Product) {
+    const recipe =
+      product.id === CUSTOM_PRODUCT_ID
+        ? { solids: [], softs: [], fruits: [], whey: false }
+        : parseRecipe(product.ingredients);
     const bowl: DraftBowl = {
       id: uid('bowl'),
       productId: product.id,
       productName: product.name,
       basePrice: Number(product.price) || 0,
-      baseIngredients: [...product.ingredients],
-      ingredients: [...product.ingredients],
-      solid: '',
-      soft: '',
-      fruits: [],
-      extras: [],
-      whey: false,
+      baseRecipe: { ...recipe, solids: [...recipe.solids], softs: [...recipe.softs], fruits: [...recipe.fruits] },
+      solids: [...recipe.solids],
+      softs: [...recipe.softs],
+      fruits: [...recipe.fruits],
+      whey: recipe.whey,
+      discountType: 'none',
+      discountValue: 0,
     };
     setBowls((current) => [...current, bowl]);
-    if (product.id === CUSTOM_PRODUCT_ID) setEditingId(bowl.id);
+    setEditingId(bowl.id);
   }
 
   function updateBowl(id: string, patch: Partial<DraftBowl>) {
@@ -122,16 +172,39 @@ export function NewOrderPage() {
   }
 
   async function submit() {
-    if (lines.length === 0 || !allComplete) return;
-    await createOrder({
-      eventId: event!.id,
-      customerName,
-      lines,
-      promotionId: promotionId || undefined,
-      paymentMethod,
-      paid: true,
-    });
-    navigate(`/evento/${event!.id}/pedidos`);
+    if (lines.length === 0 || !allComplete || submitting) return;
+    if (sendEmail && !customerEmail.trim()) {
+      setEmailNote('Indica el email del cliente para enviar el recibo.');
+      return;
+    }
+    setSubmitting(true);
+    setEmailNote('');
+    try {
+      const order = await createOrder({
+        eventId: event!.id,
+        customerName,
+        customerEmail: customerEmail.trim() || undefined,
+        lines,
+        promotionId: promotionId || undefined,
+        paymentMethod,
+        paid: true,
+        extraDiscount: manualOrderDiscount,
+      });
+      if (sendEmail && customerEmail.trim()) {
+        const result = await sendReceiptEmail({
+          to: customerEmail.trim(),
+          order,
+          eventName: event!.name,
+        });
+        setEmailNote(result.message);
+      }
+      navigate(`/evento/${event!.id}/pedidos`);
+    } catch (error) {
+      setEmailNote(
+        error instanceof Error ? error.message : 'No se pudo crear el pedido',
+      );
+      setSubmitting(false);
+    }
   }
 
   function closePage() {
@@ -159,9 +232,7 @@ export function NewOrderPage() {
         <div className="order-page">
           <section className="order-page-main">
             <div className="field field-compact">
-              <label htmlFor="order-customer">
-                Nombre del cliente (opcional)
-              </label>
+              <label htmlFor="order-customer">Nombre del cliente</label>
               <input
                 id="order-customer"
                 placeholder="Ej. Ana / Dorsal 214"
@@ -169,6 +240,26 @@ export function NewOrderPage() {
                 onChange={(e) => setCustomerName(e.target.value)}
               />
             </div>
+
+            <div className="field field-compact">
+              <label htmlFor="order-email">Email del cliente</label>
+              <input
+                id="order-email"
+                type="email"
+                placeholder="cliente@email.com"
+                value={customerEmail}
+                onChange={(e) => setCustomerEmail(e.target.value)}
+              />
+            </div>
+
+            <label className="check-row field-compact">
+              <input
+                type="checkbox"
+                checked={sendEmail}
+                onChange={(e) => setSendEmail(e.target.checked)}
+              />
+              <Mail size={15} /> Enviar recibo por email (desglose + IVA)
+            </label>
 
             <p className="order-modal-label">Catálogo</p>
             <div className="product-picker">
@@ -228,37 +319,44 @@ export function NewOrderPage() {
             ) : (
               <div className="cart-list">
                 {bowls.map((bowl, index) => {
-                  const customized =
-                    bowl.productId !== CUSTOM_PRODUCT_ID && isCustomized(bowl);
-                  const complete = isComplete(bowl);
-                  const ingredients =
-                    bowl.productId === CUSTOM_PRODUCT_ID
-                      ? customIngredients(bowl)
-                      : bowl.ingredients;
+                  const config: BowlConfig = {
+                    solids: bowl.solids,
+                    softs: bowl.softs,
+                    fruits: bowl.fruits,
+                    whey: bowl.whey,
+                  };
+                  const net = bowlNetPrice(
+                    bowl.basePrice,
+                    config,
+                    bowl.discountType,
+                    bowl.discountValue,
+                  );
+                  const complete = isBowlComplete(config);
                   return (
                     <article key={bowl.id} className="cart-item">
                       <span className="cart-item-index">{index + 1}</span>
                       <div className="cart-item-body">
                         <div className="cart-item-title">
                           <strong>{bowl.productName}</strong>
-                          <span>{formatEUR(bowlPrice(bowl))}</span>
+                          <span>{formatEUR(net)}</span>
                         </div>
-                        {customized && (
-                          <span className="customized-badge">Modificado</span>
-                        )}
+                        {bowl.discountType !== 'none' &&
+                          bowl.discountValue > 0 && (
+                            <span className="customized-badge">Dto. línea</span>
+                          )}
                         {!complete && (
                           <span className="builder-status">Sin completar</span>
                         )}
                         <p>
-                          {ingredients.join(' · ') || 'Elige los ingredientes'}
+                          {bowlIngredients(config).slice(1).join(' · ') ||
+                            'Configura el bowl'}
                         </p>
                       </div>
                       <div className="cart-item-actions">
                         <button
                           type="button"
                           className="icon-btn"
-                          aria-label={`Modificar ${bowl.productName} ${index + 1}`}
-                          title="Modificar ingredientes"
+                          aria-label={`Modificar ${bowl.productName}`}
                           onClick={() => setEditingId(bowl.id)}
                         >
                           <Pencil size={15} />
@@ -266,7 +364,7 @@ export function NewOrderPage() {
                         <button
                           type="button"
                           className="icon-btn danger"
-                          aria-label={`Eliminar ${bowl.productName} ${index + 1}`}
+                          aria-label={`Eliminar ${bowl.productName}`}
                           onClick={() => removeBowl(bowl.id)}
                         >
                           <Trash2 size={15} />
@@ -279,19 +377,50 @@ export function NewOrderPage() {
             )}
 
             <div className="field">
-              <label htmlFor="order-promo">Promoción</label>
+              <label htmlFor="order-promo">Promoción (pedido)</label>
               <select
                 id="order-promo"
                 value={promotionId}
                 onChange={(e) => setPromotionId(e.target.value)}
               >
-                <option value="">Sin descuento</option>
+                <option value="">Sin promoción</option>
                 {data.promotions.map((item) => (
                   <option key={item.id} value={item.id}>
                     {item.name}
                   </option>
                 ))}
               </select>
+            </div>
+
+            <div className="discount-row">
+              <div className="field">
+                <label htmlFor="order-discount-type">Dto. pedido</label>
+                <select
+                  id="order-discount-type"
+                  value={orderDiscountType}
+                  onChange={(e) =>
+                    setOrderDiscountType(e.target.value as LineDiscountType)
+                  }
+                >
+                  <option value="none">Ninguno</option>
+                  <option value="percent">%</option>
+                  <option value="fixed">€ fijo</option>
+                </select>
+              </div>
+              <div className="field">
+                <label htmlFor="order-discount-value">Valor</label>
+                <input
+                  id="order-discount-value"
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  disabled={orderDiscountType === 'none'}
+                  value={orderDiscountValue || ''}
+                  onChange={(e) =>
+                    setOrderDiscountValue(Number(e.target.value) || 0)
+                  }
+                />
+              </div>
             </div>
 
             <div className="field">
@@ -325,50 +454,45 @@ export function NewOrderPage() {
                   <span>Descuento</span>
                   <span>−{formatEUR(discount)}</span>
                 </div>
+                <div className="totals-row">
+                  <span>Base (sin IVA)</span>
+                  <span>{formatEUR(netFromGross(total))}</span>
+                </div>
+                <div className="totals-row">
+                  <span>IVA 21%</span>
+                  <span>{formatEUR(ivaFromGross(total))}</span>
+                </div>
                 <div className="totals-row grand">
                   <span>Total</span>
                   <span>{formatEUR(total)}</span>
                 </div>
               </div>
+              {emailNote && <p className="builder-status">{emailNote}</p>}
               <button
                 type="button"
                 className="btn btn-primary btn-lg cart-submit"
-                disabled={lines.length === 0 || !allComplete}
+                disabled={lines.length === 0 || !allComplete || submitting}
                 onClick={submit}
               >
-                Crear pedido
+                {submitting ? 'Creando…' : 'Crear pedido'}
               </button>
             </div>
           </aside>
         </div>
       </main>
 
-      {editingBowl &&
-        (editingBowl.productId === CUSTOM_PRODUCT_ID ? (
-          <CustomBowlModal
-            bowl={editingBowl}
-            onChange={(patch) => updateBowl(editingBowl.id, patch)}
-            onClose={() => setEditingId(null)}
-          />
-        ) : (
-          <PresetBowlModal
-            bowl={editingBowl}
-            onChange={(ingredients) =>
-              updateBowl(editingBowl.id, { ingredients })
-            }
-            onReset={() =>
-              updateBowl(editingBowl.id, {
-                ingredients: [...editingBowl.baseIngredients],
-              })
-            }
-            onClose={() => setEditingId(null)}
-          />
-        ))}
+      {editingBowl && (
+        <BowlConfigModal
+          bowl={editingBowl}
+          onChange={(patch) => updateBowl(editingBowl.id, patch)}
+          onClose={() => setEditingId(null)}
+        />
+      )}
     </div>
   );
 }
 
-function CustomBowlModal({
+function BowlConfigModal({
   bowl,
   onChange,
   onClose,
@@ -377,7 +501,27 @@ function CustomBowlModal({
   onChange: (patch: Partial<DraftBowl>) => void;
   onClose: () => void;
 }) {
-  const complete = isComplete(bowl);
+  const config: BowlConfig = {
+    solids: bowl.solids,
+    softs: bowl.softs,
+    fruits: bowl.fruits,
+    whey: bowl.whey,
+  };
+  const complete = isBowlComplete(config);
+  const surcharges = bowlSurcharges(config);
+  const gross = bowlGrossPrice(bowl.basePrice, config);
+  const discount = lineDiscountAmount(
+    gross,
+    bowl.discountType,
+    bowl.discountValue,
+  );
+  const net = bowlNetPrice(
+    bowl.basePrice,
+    config,
+    bowl.discountType,
+    bowl.discountValue,
+  );
+
   return (
     <Modal
       title={`Configurar ${bowl.productName}`}
@@ -387,80 +531,121 @@ function CustomBowlModal({
     >
       <div className="custom-builder-heading">
         <div>
-          <strong>{formatEUR(bowlPrice(bowl))}</strong>
-          <span>Esta configuración solo afecta a esta unidad.</span>
+          <strong>{formatEUR(net)}</strong>
+          <span>
+            Base {formatEUR(bowl.basePrice)}
+            {surcharges.total > 0 && ` · Extras ${formatEUR(surcharges.total)}`}
+            {discount > 0 && ` · Dto. −${formatEUR(discount)}`}
+          </span>
         </div>
         <span className={`builder-status${complete ? ' complete' : ''}`}>
           {complete ? 'Completo' : 'Faltan opciones'}
         </span>
       </div>
 
-      <OptionGroup
-        step="1"
-        label="Elige 1 topping sólido"
-        options={SOLID_TOPPINGS}
-        selected={[bowl.solid]}
-        onToggle={(solid) => onChange({ solid })}
-      />
-      <OptionGroup
-        step="2"
-        label="Elige 1 topping blando"
-        options={SOFT_TOPPINGS}
-        selected={[bowl.soft]}
-        optionSuffix={(option) =>
-          option === 'Crema de pistacho' ? ' +1 €' : ''
-        }
-        onToggle={(soft) => onChange({ soft })}
-      />
-      <OptionGroup
-        step="3"
-        label="Elige 2 frutas"
-        options={FRUITS}
-        selected={bowl.fruits}
+      <ToppingSection
+        variant="duro"
+        title="Toppings duros"
+        hint={`Incluye ${FREE_SOLID} gratis. Cada uno extra +1 €.`}
+        options={[...SOLID_TOPPINGS]}
+        selected={bowl.solids}
+        maxFree={FREE_SOLID}
         onToggle={(option) =>
-          onChange({
-            fruits: bowl.fruits.includes(option)
-              ? bowl.fruits.filter((item) => item !== option)
-              : bowl.fruits.length < 2
-                ? [...bowl.fruits, option]
-                : bowl.fruits,
-          })
+          onChange({ solids: toggleInList(bowl.solids, option) })
         }
       />
 
-      <div className="custom-extras">
+      <ToppingSection
+        variant="blando"
+        title="Toppings blandos"
+        hint={`Incluye ${FREE_SOFT} gratis. Extra +1 €. Crema de pistacho siempre +1 €.`}
+        options={[...SOFT_TOPPINGS]}
+        selected={bowl.softs}
+        maxFree={FREE_SOFT}
+        optionSuffix={(option) =>
+          option === PISTACHIO ? ' · siempre +1 €' : ''
+        }
+        onToggle={(option) =>
+          onChange({ softs: toggleInList(bowl.softs, option) })
+        }
+      />
+
+      <ToppingSection
+        variant="fruta"
+        title="Frutas"
+        hint={`Incluye ${FREE_FRUITS} gratis. Cada una extra +1 €.`}
+        options={[...FRUITS]}
+        selected={bowl.fruits}
+        maxFree={FREE_FRUITS}
+        onToggle={(option) =>
+          onChange({ fruits: toggleInList(bowl.fruits, option) })
+        }
+      />
+
+      <div className="builder-section builder-section-extra">
+        <div className="builder-section-head">
+          <strong>Extras</strong>
+          <span>Opcional</span>
+        </div>
         <label className="check-row">
           <input
             type="checkbox"
             checked={bowl.whey}
             onChange={(event) => onChange({ whey: event.target.checked })}
           />
-          Añadir proteína whey <strong>+1,50 €</strong>
+          Proteína whey <strong>+{formatEUR(WHEY_PRICE)}</strong>
         </label>
-        <div>
-          <span className="custom-extra-label">
-            Toppings extra <strong>+1 € cada uno</strong>
-          </span>
-          <div className="builder-options">
-            {[...SOLID_TOPPINGS, ...SOFT_TOPPINGS, ...FRUITS].map((option) => (
-              <button
-                key={option}
-                type="button"
-                className={`builder-option${bowl.extras.includes(option) ? ' active' : ''}`}
-                onClick={() =>
-                  onChange({
-                    extras: bowl.extras.includes(option)
-                      ? bowl.extras.filter((item) => item !== option)
-                      : [...bowl.extras, option],
-                  })
-                }
-              >
-                {option}
-              </button>
-            ))}
-          </div>
+      </div>
+
+      <div className="builder-section">
+        <div className="builder-section-head">
+          <strong>Descuento de este bowl</strong>
+        </div>
+        <div className="discount-row">
+          <select
+            value={bowl.discountType}
+            onChange={(e) =>
+              onChange({
+                discountType: e.target.value as LineDiscountType,
+                discountValue:
+                  e.target.value === 'none' ? 0 : bowl.discountValue,
+              })
+            }
+          >
+            <option value="none">Sin descuento</option>
+            <option value="percent">Porcentaje %</option>
+            <option value="fixed">Importe € fijo</option>
+          </select>
+          <input
+            type="number"
+            min="0"
+            step="0.01"
+            disabled={bowl.discountType === 'none'}
+            value={bowl.discountValue || ''}
+            onChange={(e) =>
+              onChange({ discountValue: Number(e.target.value) || 0 })
+            }
+            placeholder="0"
+          />
         </div>
       </div>
+
+      {bowl.productId !== CUSTOM_PRODUCT_ID && (
+        <button
+          type="button"
+          className="btn btn-ghost"
+          onClick={() =>
+            onChange({
+              solids: [...bowl.baseRecipe.solids],
+              softs: [...bowl.baseRecipe.softs],
+              fruits: [...bowl.baseRecipe.fruits],
+              whey: bowl.baseRecipe.whey,
+            })
+          }
+        >
+          Restaurar receta
+        </button>
+      )}
 
       <div className="modal-actions">
         <button
@@ -476,143 +661,71 @@ function CustomBowlModal({
   );
 }
 
-function PresetBowlModal({
-  bowl,
-  onChange,
-  onReset,
-  onClose,
-}: {
-  bowl: DraftBowl;
-  onChange: (ingredients: string[]) => void;
-  onReset: () => void;
-  onClose: () => void;
-}) {
-  const customized = isCustomized(bowl);
-  return (
-    <Modal
-      title={`Modificar ${bowl.productName}`}
-      onClose={onClose}
-      wide
-      className="bowl-modal"
-    >
-      <div className="custom-builder-heading">
-        <div>
-          <strong>{formatEUR(bowlPrice(bowl))}</strong>
-          <span>Activa o desactiva ingredientes para esta unidad.</span>
-        </div>
-        {customized && <span className="customized-badge">Modificado</span>}
-      </div>
-
-      <div className="builder-options">
-        {EDITABLE_INGREDIENTS.map((ingredient) => (
-          <button
-            key={ingredient}
-            type="button"
-            className={`builder-option${bowl.ingredients.includes(ingredient) ? ' active' : ''}`}
-            onClick={() =>
-              onChange(
-                bowl.ingredients.includes(ingredient)
-                  ? bowl.ingredients.filter((item) => item !== ingredient)
-                  : [...bowl.ingredients, ingredient],
-              )
-            }
-          >
-            {ingredient}
-          </button>
-        ))}
-      </div>
-      <p className="preset-editor-note">
-        El açaí base siempre se mantiene. Estos cambios no modifican el precio.
-      </p>
-
-      <div className="modal-actions modal-actions-spread">
-        {customized ? (
-          <button type="button" className="btn btn-ghost" onClick={onReset}>
-            Restaurar receta
-          </button>
-        ) : (
-          <span />
-        )}
-        <button
-          type="button"
-          className="btn btn-primary btn-lg"
-          onClick={onClose}
-        >
-          Listo
-        </button>
-      </div>
-    </Modal>
-  );
-}
-
-function OptionGroup({
-  step,
-  label,
+function ToppingSection({
+  variant,
+  title,
+  hint,
   options,
   selected,
+  maxFree,
   onToggle,
   optionSuffix,
 }: {
-  step: string;
-  label: string;
+  variant: 'duro' | 'blando' | 'fruta';
+  title: string;
+  hint: string;
   options: string[];
   selected: string[];
+  maxFree: number;
   onToggle: (option: string) => void;
   optionSuffix?: (option: string) => string;
 }) {
+  const freeUsed = Math.min(selected.length, maxFree);
+  const extras = Math.max(0, selected.length - maxFree);
   return (
-    <div className="builder-step">
-      <div className="builder-step-title">
-        <span>{step}</span>
-        <strong>{label}</strong>
+    <div className={`builder-section builder-section-${variant}`}>
+      <div className="builder-section-head">
+        <div>
+          <strong>{title}</strong>
+          <span>{hint}</span>
+        </div>
+        <span className="builder-section-count">
+          {freeUsed}/{maxFree}
+          {extras > 0 ? ` · +${extras} extra` : ''}
+        </span>
       </div>
       <div className="builder-options">
-        {options.map((option) => (
-          <button
-            key={option}
-            type="button"
-            className={`builder-option${selected.includes(option) ? ' active' : ''}`}
-            onClick={() => onToggle(option)}
-          >
-            {option}
-            {optionSuffix?.(option)}
-          </button>
-        ))}
+        {options.map((option) => {
+          const active = selected.includes(option);
+          const paid = active && isPaidExtra(selected, option, maxFree);
+          return (
+            <button
+              key={option}
+              type="button"
+              className={`builder-option${active ? ' active' : ''}${paid ? ' paid-extra' : ''}`}
+              onClick={() => onToggle(option)}
+            >
+              {option}
+              {optionSuffix?.(option)}
+              {paid ? ' · +1 €' : ''}
+            </button>
+          );
+        })}
       </div>
     </div>
   );
 }
 
-function customIngredients(bowl: DraftBowl): string[] {
-  return [
-    'Açaí',
-    bowl.solid,
-    bowl.soft,
-    ...bowl.fruits,
-    ...bowl.extras.map((extra) => `${extra} extra`),
-    ...(bowl.whey ? ['Proteína whey'] : []),
-  ].filter(Boolean);
-}
-
-function bowlPrice(bowl: DraftBowl): number {
-  if (bowl.productId !== CUSTOM_PRODUCT_ID) return bowl.basePrice;
-  return round2(
-    bowl.basePrice +
-      (bowl.soft === 'Crema de pistacho' ? 1 : 0) +
-      bowl.extras.length +
-      (bowl.whey ? 1.5 : 0),
-  );
-}
-
-function isComplete(bowl: DraftBowl): boolean {
-  return (
-    bowl.productId !== CUSTOM_PRODUCT_ID ||
-    (!!bowl.solid && !!bowl.soft && bowl.fruits.length === 2)
-  );
-}
-
 function isCustomized(bowl: DraftBowl): boolean {
-  const current = [...bowl.ingredients].sort().join('|');
-  const original = [...bowl.baseIngredients].sort().join('|');
+  const current = bowlIngredients({
+    solids: bowl.solids,
+    softs: bowl.softs,
+    fruits: bowl.fruits,
+    whey: bowl.whey,
+  })
+    .slice(1)
+    .sort()
+    .join('|');
+  const original = bowlIngredients(bowl.baseRecipe).slice(1).sort().join('|');
   return current !== original;
 }

@@ -96,15 +96,32 @@ Repo → **Settings** → **Secrets and variables** → **Actions** → crea:
 
 Tras el siguiente push/deploy, todos los dispositivos compartirán la misma nube.
 
+## Recibos por email (EmailJS + Gmail)
+
+Sin EmailJS, al marcar «Enviar recibo» se abre el cliente de correo con el desglose
+(base + IVA) listo para enviar desde `info.tropicboost@gmail.com`.
+
+Para envío automático:
+
+1. Crea cuenta en [EmailJS](https://www.emailjs.com/)
+2. Añade un servicio **Gmail** conectado a `info.tropicboost@gmail.com`
+3. Crea una plantilla con variables: `to_email`, `subject`, `message`, `customer_name`, `order_number`, `total`
+4. Copia Service ID, Template ID y Public Key a `.env` y a GitHub Secrets:
+
+- `VITE_EMAILJS_SERVICE_ID`
+- `VITE_EMAILJS_TEMPLATE_ID`
+- `VITE_EMAILJS_PUBLIC_KEY`
+
 ## Qué incluye
 
 - **Login** con contraseña única
 - **Dashboard principal**: eventos, productos, materia prima, promociones
 - **Dashboard del evento**: KPIs, ventas por hora, top productos
-- **TPV de pedidos**: nuevo pedido → en curso → listo → entregado
+- **TPV de pedidos**: modal de toppings (duros / blandos / frutas), límites y extras
+- **Descuentos** por bowl y por pedido; recibo con IVA por email
 - **Histórico** con filtros
 - **Sync en tiempo real** entre dispositivos (Firebase Firestore) o `localStorage` si no hay config
 
 ## Stack
 
-Vite · React · TypeScript · React Router · Recharts · Firebase
+Vite · React · TypeScript · React Router · Recharts · Firebase · EmailJS

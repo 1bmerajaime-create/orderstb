@@ -1,7 +1,14 @@
-import { CheckCircle2, Trash2 } from 'lucide-react';
+import { CheckCircle2, Mail, Trash2 } from 'lucide-react';
+import { useState } from 'react';
 import { Modal } from './ui';
+import { sendReceiptEmail } from '../lib/receipt';
 import { useStore } from '../lib/store';
-import { formatTime } from '../lib/utils';
+import {
+  formatEUR,
+  formatTime,
+  ivaFromGross,
+  netFromGross,
+} from '../lib/utils';
 import type { Order } from '../types';
 
 export function OrderDetailModal({
@@ -13,6 +20,33 @@ export function OrderDetailModal({
 }) {
   const { data, deleteOrder, updateOrderStatus } = useStore();
   const currentOrder = data.orders.find((item) => item.id === order.id) || order;
+  const event = data.events.find((item) => item.id === currentOrder.eventId);
+  const [email, setEmail] = useState(currentOrder.customerEmail || '');
+  const [emailNote, setEmailNote] = useState('');
+  const [sending, setSending] = useState(false);
+
+  async function handleSendReceipt() {
+    if (!email.trim()) {
+      setEmailNote('Indica un email.');
+      return;
+    }
+    setSending(true);
+    setEmailNote('');
+    try {
+      const result = await sendReceiptEmail({
+        to: email.trim(),
+        order: currentOrder,
+        eventName: event?.name,
+      });
+      setEmailNote(result.message);
+    } catch (error) {
+      setEmailNote(
+        error instanceof Error ? error.message : 'No se pudo enviar el recibo',
+      );
+    } finally {
+      setSending(false);
+    }
+  }
 
   return (
     <Modal title={`Pedido #${currentOrder.number}`} onClose={onClose} wide>
@@ -39,7 +73,13 @@ export function OrderDetailModal({
                       <span className="customized-badge">Modificado</span>
                     )}
                   </strong>
+                  <span>{formatEUR(line.unitPrice * line.quantity)}</span>
                 </div>
+                {(line.lineDiscount || 0) > 0 && (
+                  <p className="muted">
+                    Dto. producto −{formatEUR(line.lineDiscount || 0)}
+                  </p>
+                )}
                 <ul className="ingredient-chips">
                   {ingredients.map((ing) => (
                     <li key={ing}>{ing}</li>
@@ -51,6 +91,51 @@ export function OrderDetailModal({
               </article>
             );
           })}
+        </div>
+
+        <div className="totals totals-inline">
+          <div className="totals-row">
+            <span>Subtotal</span>
+            <span>{formatEUR(currentOrder.subtotal)}</span>
+          </div>
+          <div className="totals-row">
+            <span>Descuento</span>
+            <span>−{formatEUR(currentOrder.discount)}</span>
+          </div>
+          <div className="totals-row">
+            <span>Base (sin IVA)</span>
+            <span>{formatEUR(netFromGross(currentOrder.total))}</span>
+          </div>
+          <div className="totals-row">
+            <span>IVA 21%</span>
+            <span>{formatEUR(ivaFromGross(currentOrder.total))}</span>
+          </div>
+          <div className="totals-row grand">
+            <span>Total</span>
+            <span>{formatEUR(currentOrder.total)}</span>
+          </div>
+        </div>
+
+        <div className="field">
+          <label htmlFor="receipt-email">Enviar recibo por email</label>
+          <div className="discount-row">
+            <input
+              id="receipt-email"
+              type="email"
+              placeholder="cliente@email.com"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+            />
+            <button
+              type="button"
+              className="btn btn-ghost"
+              disabled={sending}
+              onClick={handleSendReceipt}
+            >
+              <Mail size={16} /> {sending ? 'Enviando…' : 'Enviar'}
+            </button>
+          </div>
+          {emailNote && <p className="builder-status complete">{emailNote}</p>}
         </div>
 
         <div className="modal-actions order-detail-actions">

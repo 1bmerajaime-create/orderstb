@@ -1746,6 +1746,122 @@ tbody tr.row-clickable:hover td {
   color: var(--ink);
 }
 
+.builder-option.paid-extra.active {
+  border-color: rgba(251, 191, 36, 0.55);
+  background: rgba(251, 191, 36, 0.14);
+}
+
+.builder-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+  padding: 0.85rem 0.9rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: rgba(14, 6, 24, 0.35);
+  border-left-width: 4px;
+}
+
+.builder-section-duro {
+  border-left-color: #c4a574;
+  background: linear-gradient(
+    90deg,
+    rgba(196, 165, 116, 0.12),
+    rgba(14, 6, 24, 0.35) 40%
+  );
+}
+
+.builder-section-blando {
+  border-left-color: #7ec8e3;
+  background: linear-gradient(
+    90deg,
+    rgba(126, 200, 227, 0.12),
+    rgba(14, 6, 24, 0.35) 40%
+  );
+}
+
+.builder-section-fruta {
+  border-left-color: #e87a9a;
+  background: linear-gradient(
+    90deg,
+    rgba(232, 122, 154, 0.12),
+    rgba(14, 6, 24, 0.35) 40%
+  );
+}
+
+.builder-section-extra {
+  border-left-color: var(--lavender-bright);
+}
+
+.builder-section-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.builder-section-head strong {
+  display: block;
+  font-family: var(--display);
+  font-size: 0.95rem;
+}
+
+.builder-section-head span {
+  display: block;
+  color: var(--ink-soft);
+  font-size: 0.76rem;
+  margin-top: 0.15rem;
+}
+
+.builder-section-count {
+  flex-shrink: 0;
+  padding: 0.25rem 0.5rem;
+  border-radius: 999px;
+  background: rgba(168, 85, 224, 0.18);
+  color: var(--lavender-bright);
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
+.builder-section-duro .builder-section-count {
+  background: rgba(196, 165, 116, 0.22);
+  color: #e8d5b5;
+}
+
+.builder-section-blando .builder-section-count {
+  background: rgba(126, 200, 227, 0.22);
+  color: #b8e4f5;
+}
+
+.builder-section-fruta .builder-section-count {
+  background: rgba(232, 122, 154, 0.22);
+  color: #f5b8cb;
+}
+
+.discount-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.55rem;
+  align-items: end;
+}
+
+.discount-row input,
+.discount-row select {
+  width: 100%;
+}
+
+.order-detail-line-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.check-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+
 .custom-extras {
   display: flex;
   flex-direction: column;

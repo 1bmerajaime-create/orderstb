@@ -72,10 +72,13 @@ interface StoreContextValue {
   createOrder: (input: {
     eventId: string;
     customerName: string;
+    customerEmail?: string;
     lines: OrderLine[];
     promotionId?: string;
     paymentMethod: PaymentMethod;
     paid: boolean;
+    /** Descuento manual de pedido (además o en lugar de promo). */
+    extraDiscount?: number;
   }) => Promise<Order>;
   updateOrderStatus: (id: string, status: OrderStatus) => Promise<void>;
   markPaid: (id: string, method: PaymentMethod) => Promise<void>;
@@ -362,20 +365,25 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     async (input: {
       eventId: string;
       customerName: string;
+      customerEmail?: string;
       lines: OrderLine[];
       promotionId?: string;
       paymentMethod: PaymentMethod;
       paid: boolean;
+      extraDiscount?: number;
     }) => {
       const promo = data.promotions.find((p) => p.id === input.promotionId);
       const subtotal = calcSubtotal(input.lines);
-      const discount = calcDiscount(input.lines, promo);
+      const promoDiscount = calcDiscount(input.lines, promo);
+      const extra = Math.max(0, Number(input.extraDiscount) || 0);
+      const discount = round2(Math.min(subtotal, promoDiscount + extra));
       const total = round2(Math.max(0, subtotal - discount));
       const now = new Date().toISOString();
       const base = {
         id: uid('ord'),
         eventId: input.eventId,
         customerName: input.customerName.trim(),
+        customerEmail: input.customerEmail?.trim() || undefined,
         lines: input.lines,
         subtotal,
         discount,

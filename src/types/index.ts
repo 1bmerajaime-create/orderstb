@@ -61,7 +61,12 @@ export interface OrderLine {
   productId: string;
   productName: string;
   quantity: number;
+  /** Precio final unitario tras descuento de línea (IVA incl.). */
   unitPrice: number;
+  /** Precio antes del descuento de línea. */
+  baseUnitPrice?: number;
+  /** Descuento aplicado a esta línea (importe). */
+  lineDiscount?: number;
   /** Foto de los ingredientes elegidos en el momento de crear el pedido. */
   ingredients?: string[];
   /** La receta preestablecida se modificó para este bowl. */
@@ -73,6 +78,7 @@ export interface Order {
   number: number;
   eventId: string;
   customerName: string;
+  customerEmail?: string;
   lines: OrderLine[];
   subtotal: number;
   discount: number;
