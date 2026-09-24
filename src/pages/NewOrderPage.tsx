@@ -53,13 +53,14 @@ export function NewOrderPage() {
 
   const [customerName, setCustomerName] = useState('');
   const [bowls, setBowls] = useState<DraftBowl[]>([]);
-  const [editingId, setEditingId] = useState<string | null>(null);
+  const [draft, setDraft] = useState<{
+    bowl: DraftBowl;
+    mode: 'new' | 'edit';
+  } | null>(null);
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('tarjeta');
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState('');
   const [createdOrder, setCreatedOrder] = useState<Order | null>(null);
-
-  const editingBowl = bowls.find((bowl) => bowl.id === editingId) || null;
 
   const lines: OrderLine[] = useMemo(
     () =>
@@ -99,23 +100,25 @@ export function NewOrderPage() {
 
   const subtotal = calcSubtotal(lines);
   const total = subtotal;
-  const allComplete = bowls.every((bowl) =>
-    isBowlComplete({
-      solids: bowl.solids,
-      softs: bowl.softs,
-      fruits: bowl.fruits,
-      whey: bowl.whey,
-    }),
-  );
+  const allComplete =
+    bowls.length > 0 &&
+    bowls.every((bowl) =>
+      isBowlComplete({
+        solids: bowl.solids,
+        softs: bowl.softs,
+        fruits: bowl.fruits,
+        whey: bowl.whey,
+      }),
+    );
 
   if (!event) return <Navigate to="/" replace />;
 
-  function addBowl(product: Product) {
+  function makeBowl(product: Product): DraftBowl {
     const recipe =
       product.id === CUSTOM_PRODUCT_ID
         ? { solids: [], softs: [], fruits: [], whey: false }
         : parseRecipe(product.ingredients);
-    const bowl: DraftBowl = {
+    return {
       id: uid('bowl'),
       productId: product.id,
       productName: product.name,
@@ -133,19 +136,62 @@ export function NewOrderPage() {
       discountType: 'none',
       discountValue: 0,
     };
-    setBowls((current) => [...current, bowl]);
-    setEditingId(bowl.id);
   }
 
-  function updateBowl(id: string, patch: Partial<DraftBowl>) {
-    setBowls((current) =>
-      current.map((bowl) => (bowl.id === id ? { ...bowl, ...patch } : bowl)),
+  function startNewBowl(product: Product) {
+    setDraft({ bowl: makeBowl(product), mode: 'new' });
+  }
+
+  function startEditBowl(bowl: DraftBowl) {
+    setDraft({
+      bowl: {
+        ...bowl,
+        solids: [...bowl.solids],
+        softs: [...bowl.softs],
+        fruits: [...bowl.fruits],
+        baseRecipe: {
+          ...bowl.baseRecipe,
+          solids: [...bowl.baseRecipe.solids],
+          softs: [...bowl.baseRecipe.softs],
+          fruits: [...bowl.baseRecipe.fruits],
+        },
+      },
+      mode: 'edit',
+    });
+  }
+
+  function updateDraft(patch: Partial<DraftBowl>) {
+    setDraft((current) =>
+      current ? { ...current, bowl: { ...current.bowl, ...patch } } : null,
     );
+  }
+
+  function confirmDraft() {
+    if (!draft) return;
+    const config: BowlConfig = {
+      solids: draft.bowl.solids,
+      softs: draft.bowl.softs,
+      fruits: draft.bowl.fruits,
+      whey: draft.bowl.whey,
+    };
+    if (!isBowlComplete(config)) return;
+
+    if (draft.mode === 'new') {
+      setBowls((current) => [...current, draft.bowl]);
+    } else {
+      setBowls((current) =>
+        current.map((bowl) => (bowl.id === draft.bowl.id ? draft.bowl : bowl)),
+      );
+    }
+    setDraft(null);
+  }
+
+  function cancelDraft() {
+    setDraft(null);
   }
 
   function removeBowl(id: string) {
     setBowls((current) => current.filter((bowl) => bowl.id !== id));
-    if (editingId === id) setEditingId(null);
   }
 
   async function submit() {
@@ -219,7 +265,7 @@ export function NewOrderPage() {
                     key={product.id}
                     type="button"
                     className={`picker-chip${count > 0 ? ' selected' : ''}`}
-                    onClick={() => addBowl(product)}
+                    onClick={() => startNewBowl(product)}
                   >
                     <span className="picker-chip-name">{product.name}</span>
                     <span className="picker-chip-meta">
@@ -287,7 +333,7 @@ export function NewOrderPage() {
                           type="button"
                           className="icon-btn"
                           aria-label={`Modificar ${bowl.productName}`}
-                          onClick={() => setEditingId(bowl.id)}
+                          onClick={() => startEditBowl(bowl)}
                         >
                           <Pencil size={15} />
                         </button>
@@ -358,11 +404,13 @@ export function NewOrderPage() {
         </div>
       </main>
 
-      {editingBowl && (
+      {draft && (
         <BowlConfigModal
-          bowl={editingBowl}
-          onChange={(patch) => updateBowl(editingBowl.id, patch)}
-          onClose={() => setEditingId(null)}
+          bowl={draft.bowl}
+          confirmLabel={draft.mode === 'new' ? 'Añadir al pedido' : 'Guardar'}
+          onChange={updateDraft}
+          onConfirm={confirmDraft}
+          onCancel={cancelDraft}
         />
       )}
 
@@ -381,11 +429,15 @@ export function NewOrderPage() {
 function BowlConfigModal({
   bowl,
   onChange,
-  onClose,
+  onConfirm,
+  onCancel,
+  confirmLabel,
 }: {
   bowl: DraftBowl;
   onChange: (patch: Partial<DraftBowl>) => void;
-  onClose: () => void;
+  onConfirm: () => void;
+  onCancel: () => void;
+  confirmLabel: string;
 }) {
   const config: BowlConfig = {
     solids: bowl.solids,
@@ -411,7 +463,7 @@ function BowlConfigModal({
   return (
     <Modal
       title={`Configurar ${bowl.productName}`}
-      onClose={onClose}
+      onClose={onCancel}
       wide
       className="bowl-modal"
     >
@@ -481,37 +533,59 @@ function BowlConfigModal({
         </label>
       </div>
 
-      <div className="builder-section">
+      <div className="builder-section builder-section-discount">
         <div className="builder-section-head">
-          <strong>Descuento de este bowl</strong>
+          <strong>Descuento</strong>
+          <span>Solo este bowl</span>
         </div>
-        <div className="discount-row">
-          <select
-            value={bowl.discountType}
-            onChange={(e) =>
-              onChange({
-                discountType: e.target.value as LineDiscountType,
-                discountValue:
-                  e.target.value === 'none' ? 0 : bowl.discountValue,
-              })
-            }
-          >
-            <option value="none">Sin descuento</option>
-            <option value="percent">Porcentaje %</option>
-            <option value="fixed">Importe € fijo</option>
-          </select>
-          <input
-            type="number"
-            min="0"
-            step="0.01"
-            disabled={bowl.discountType === 'none'}
-            value={bowl.discountValue || ''}
-            onChange={(e) =>
-              onChange({ discountValue: Number(e.target.value) || 0 })
-            }
-            placeholder="0"
-          />
+        <div className="discount-toggle">
+          {(
+            [
+              ['none', 'Ninguno'],
+              ['percent', '%'],
+              ['fixed', '€'],
+            ] as const
+          ).map(([id, label]) => (
+            <button
+              key={id}
+              type="button"
+              className={`discount-toggle-btn${bowl.discountType === id ? ' active' : ''}`}
+              onClick={() =>
+                onChange({
+                  discountType: id,
+                  discountValue: id === 'none' ? 0 : bowl.discountValue,
+                })
+              }
+            >
+              {label}
+            </button>
+          ))}
         </div>
+        {bowl.discountType !== 'none' && (
+          <div className="discount-value-row">
+            <label htmlFor="bowl-discount-value">
+              {bowl.discountType === 'percent' ? 'Porcentaje' : 'Importe'}
+            </label>
+            <div className="discount-value-input">
+              <input
+                id="bowl-discount-value"
+                type="number"
+                min="0"
+                step={bowl.discountType === 'percent' ? '1' : '0.01'}
+                value={bowl.discountValue || ''}
+                onChange={(e) =>
+                  onChange({ discountValue: Number(e.target.value) || 0 })
+                }
+                placeholder="0"
+                autoFocus
+              />
+              <span>{bowl.discountType === 'percent' ? '%' : '€'}</span>
+            </div>
+          </div>
+        )}
+        {discount > 0 && (
+          <p className="discount-preview">−{formatEUR(discount)} en este bowl</p>
+        )}
       </div>
 
       {bowl.productId !== CUSTOM_PRODUCT_ID && (
@@ -532,13 +606,16 @@ function BowlConfigModal({
       )}
 
       <div className="modal-actions">
+        <button type="button" className="btn btn-ghost" onClick={onCancel}>
+          Cancelar
+        </button>
         <button
           type="button"
           className="btn btn-primary btn-lg"
           disabled={!complete}
-          onClick={onClose}
+          onClick={onConfirm}
         >
-          Listo
+          {confirmLabel}
         </button>
       </div>
     </Modal>

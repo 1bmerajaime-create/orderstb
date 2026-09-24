@@ -48,16 +48,33 @@ export function OrderDetailModal({
           </div>
 
           <div className="order-detail-lines">
-            {currentOrder.lines.map((line, index) => (
-              <BowlLineCard
-                key={`${line.productId}-${index}`}
-                line={line}
-                fallbackIngredients={
-                  data.products.find((p) => p.id === line.productId)
-                    ?.ingredients || []
-                }
-              />
-            ))}
+            <div className="bowl-table">
+              <div className="bowl-table-head">
+                <span className="bowl-table-product">Bowl</span>
+                <span className="bowl-breakdown-label bowl-breakdown-base">
+                  Base
+                </span>
+                <span className="bowl-breakdown-label bowl-breakdown-fruta">
+                  Fruta
+                </span>
+                <span className="bowl-breakdown-label bowl-breakdown-duro">
+                  Duro
+                </span>
+                <span className="bowl-breakdown-label bowl-breakdown-blando">
+                  Blando
+                </span>
+              </div>
+              {currentOrder.lines.map((line, index) => (
+                <BowlLineRow
+                  key={`${line.productId}-${index}`}
+                  line={line}
+                  fallbackIngredients={
+                    data.products.find((p) => p.id === line.productId)
+                      ?.ingredients || []
+                  }
+                />
+              ))}
+            </div>
           </div>
 
           <div className="modal-actions order-detail-actions">
@@ -105,7 +122,7 @@ export function OrderDetailModal({
   );
 }
 
-function BowlLineCard({
+function BowlLineRow({
   line,
   fallbackIngredients,
 }: {
@@ -117,49 +134,48 @@ function BowlLineCard({
     : fallbackIngredients;
   const config = parseRecipe(ingredients);
   const base = ingredients.find((item) => /a[cç]a[ií]/i.test(item)) || 'Açaí';
-
-  const groups = [
-    { kind: 'base', label: 'Base', values: [base] },
-    { kind: 'fruta', label: 'Fruta', values: config.fruits },
-    { kind: 'duro', label: 'Duro', values: config.solids },
-    { kind: 'blando', label: 'Blando', values: config.softs },
-    ...(config.whey
-      ? [{ kind: 'extra', label: 'Extra', values: [WHEY] }]
-      : []),
-  ];
+  const extras = config.whey ? [WHEY] : [];
 
   return (
-    <article className="order-detail-line">
-      <div className="order-detail-line-head">
+    <div className="bowl-table-row">
+      <div className="bowl-table-product">
         <strong>
           {line.quantity}× {line.productName}
-          {line.customized && (
-            <span className="customized-badge">Modificado</span>
-          )}
         </strong>
-      </div>
-      <div className="bowl-breakdown">
-        {groups.map((group) => (
-          <div
-            key={group.kind}
-            className={`bowl-breakdown-col bowl-breakdown-${group.kind}`}
-          >
-            <span className="bowl-breakdown-label">{group.label}</span>
-            <div className="bowl-breakdown-chips">
-              {group.values.length > 0 ? (
-                group.values.map((value) => (
-                  <span key={value} className="bowl-chip">
-                    {value}
-                  </span>
-                ))
-              ) : (
-                <span className="bowl-chip muted">—</span>
-              )}
-            </div>
+        {line.customized && (
+          <span className="customized-badge">Modificado</span>
+        )}
+        {extras.length > 0 && (
+          <div className="bowl-breakdown-chips bowl-breakdown-extra">
+            {extras.map((value) => (
+              <span key={value} className="bowl-chip">
+                {value}
+              </span>
+            ))}
           </div>
-        ))}
+        )}
       </div>
-    </article>
+      <ChipCell kind="base" values={[base]} />
+      <ChipCell kind="fruta" values={config.fruits} />
+      <ChipCell kind="duro" values={config.solids} />
+      <ChipCell kind="blando" values={config.softs} />
+    </div>
+  );
+}
+
+function ChipCell({ kind, values }: { kind: string; values: string[] }) {
+  return (
+    <div className={`bowl-breakdown-chips bowl-breakdown-${kind}`}>
+      {values.length > 0 ? (
+        values.map((value) => (
+          <span key={value} className="bowl-chip">
+            {value}
+          </span>
+        ))
+      ) : (
+        <span className="bowl-chip muted">—</span>
+      )}
+    </div>
   );
 }
 

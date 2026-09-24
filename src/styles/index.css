@@ -1932,6 +1932,103 @@ tbody tr.row-clickable:hover td {
   width: 100%;
 }
 
+.builder-section-discount {
+  border-left-color: rgba(251, 191, 36, 0.55);
+  background: linear-gradient(
+    90deg,
+    rgba(251, 191, 36, 0.08),
+    rgba(14, 6, 24, 0.35) 40%
+  );
+}
+
+.discount-toggle {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.35rem;
+  padding: 0.25rem;
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.28);
+  border: 1px solid var(--line);
+}
+
+.discount-toggle-btn {
+  appearance: none;
+  border: none;
+  background: transparent;
+  color: var(--ink-soft);
+  font: inherit;
+  font-weight: 700;
+  font-size: 0.85rem;
+  padding: 0.5rem 0.4rem;
+  border-radius: 8px;
+  cursor: pointer;
+  transition:
+    background 0.15s var(--ease),
+    color 0.15s var(--ease);
+}
+
+.discount-toggle-btn:hover {
+  color: var(--ink);
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.discount-toggle-btn.active {
+  background: rgba(251, 191, 36, 0.22);
+  color: #fde68a;
+  box-shadow: inset 0 0 0 1px rgba(251, 191, 36, 0.35);
+}
+
+.discount-value-row {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  margin-top: 0.15rem;
+}
+
+.discount-value-row label {
+  font-size: 0.75rem;
+  color: var(--ink-soft);
+}
+
+.discount-value-input {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.15rem 0.75rem 0.15rem 0.15rem;
+  border-radius: 10px;
+  border: 1px solid rgba(251, 191, 36, 0.3);
+  background: rgba(14, 6, 24, 0.55);
+}
+
+.discount-value-input input {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  font-size: 1.05rem;
+  font-weight: 700;
+  padding: 0.55rem 0.65rem;
+}
+
+.discount-value-input input:focus {
+  outline: none;
+}
+
+.discount-value-input span {
+  font-weight: 800;
+  color: #fde68a;
+  font-size: 0.95rem;
+}
+
+.discount-preview {
+  margin: 0;
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: #fde68a;
+}
+
 .order-detail-line-head {
   display: flex;
   justify-content: space-between;
@@ -2104,6 +2201,54 @@ tbody tr.row-clickable:hover td {
   gap: 0.75rem;
 }
 
+.bowl-table {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  border: 1px solid rgba(168, 85, 224, 0.28);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  background: rgba(14, 6, 24, 0.35);
+}
+
+.bowl-table-head,
+.bowl-table-row {
+  display: grid;
+  grid-template-columns: minmax(7.5rem, 1.15fr) repeat(4, minmax(0, 1fr));
+  gap: 0.45rem 0.55rem;
+  align-items: start;
+  padding: 0.55rem 0.7rem;
+}
+
+.bowl-table-head {
+  background: rgba(122, 53, 192, 0.18);
+  border-bottom: 1px solid rgba(168, 85, 224, 0.22);
+}
+
+.bowl-table-head .bowl-breakdown-label {
+  margin: 0;
+}
+
+.bowl-table-row + .bowl-table-row {
+  border-top: 1px solid rgba(168, 85, 224, 0.14);
+}
+
+.bowl-table-product {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  min-width: 0;
+}
+
+.bowl-table-product strong {
+  font-size: 0.88rem;
+  line-height: 1.2;
+}
+
+.bowl-table .bowl-breakdown-chips {
+  margin: 0;
+}
+
 .order-detail-line {
   padding: 0.75rem 0.85rem;
   border-radius: var(--radius-sm);
@@ -2161,6 +2306,7 @@ tbody tr.row-clickable:hover td {
   font-weight: 500;
 }
 
+.bowl-breakdown-base,
 .bowl-breakdown-base .bowl-breakdown-label {
   color: #c9b6ff;
 }
@@ -2169,6 +2315,7 @@ tbody tr.row-clickable:hover td {
   background: rgba(201, 182, 255, 0.12);
 }
 
+.bowl-breakdown-fruta,
 .bowl-breakdown-fruta .bowl-breakdown-label {
   color: #f5b8cb;
 }
@@ -2177,6 +2324,7 @@ tbody tr.row-clickable:hover td {
   background: rgba(245, 184, 203, 0.12);
 }
 
+.bowl-breakdown-blando,
 .bowl-breakdown-blando .bowl-breakdown-label {
   color: #b8e4f5;
 }
@@ -2185,6 +2333,7 @@ tbody tr.row-clickable:hover td {
   background: rgba(184, 228, 245, 0.12);
 }
 
+.bowl-breakdown-duro,
 .bowl-breakdown-duro .bowl-breakdown-label {
   color: #e8d5b5;
 }
@@ -2193,6 +2342,7 @@ tbody tr.row-clickable:hover td {
   background: rgba(232, 213, 181, 0.12);
 }
 
+.bowl-breakdown-extra,
 .bowl-breakdown-extra .bowl-breakdown-label {
   color: var(--lavender-bright);
 }
@@ -2202,6 +2352,19 @@ tbody tr.row-clickable:hover td {
 }
 
 @media (max-width: 640px) {
+  .bowl-table-head,
+  .bowl-table-row {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .bowl-table-head .bowl-table-product {
+    grid-column: 1 / -1;
+  }
+
+  .bowl-table-row .bowl-table-product {
+    grid-column: 1 / -1;
+  }
+
   .bowl-breakdown,
   .bowl-breakdown:has(.bowl-breakdown-extra) {
     grid-template-columns: repeat(2, minmax(0, 1fr));
