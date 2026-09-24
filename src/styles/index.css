@@ -1636,6 +1636,24 @@ tbody tr.row-clickable:hover td {
   touch-action: pan-y;
 }
 
+.cart-item-clickable {
+  cursor: pointer;
+  transition:
+    border-color 0.15s var(--ease),
+    background 0.15s var(--ease),
+    transform 0.18s var(--ease);
+}
+
+.cart-item-clickable:hover {
+  border-color: rgba(168, 85, 224, 0.45);
+  background: rgba(28, 12, 48, 0.95);
+}
+
+.cart-item-clickable:focus-visible {
+  outline: 2px solid rgba(168, 85, 224, 0.65);
+  outline-offset: 2px;
+}
+
 .cart-swipe {
   position: relative;
   border-radius: var(--radius-sm);

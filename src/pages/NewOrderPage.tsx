@@ -1,4 +1,4 @@
-import { Pencil, Plus, Trash2, X } from 'lucide-react';
+import { Plus, Trash2, X } from 'lucide-react';
 import { useMemo, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react';
 import { Navigate, useNavigate, useParams } from 'react-router-dom';
 import { TicketModal } from '../components/OrderDetailModal';
@@ -369,13 +369,15 @@ export function NewOrderPage() {
                         <button
                           type="button"
                           className="icon-btn"
-                          aria-label={`Modificar ${bowl.productName}`}
-                          onClick={() => {
+                          aria-label={`Eliminar ${bowl.productName}`}
+                          onPointerDown={(e) => e.stopPropagation()}
+                          onClick={(e) => {
+                            e.stopPropagation();
                             setSwipedBowlId(null);
-                            startEditBowl(bowl);
+                            removeBowl(bowl.id);
                           }}
                         >
-                          <Pencil size={15} />
+                          <Trash2 size={15} />
                         </button>
                       </div>
                     </SwipeCartItem>
@@ -742,6 +744,7 @@ function SwipeCartItem({
   const startX = useRef(0);
   const startY = useRef(0);
   const dragging = useRef(false);
+  const moved = useRef(false);
   const [offset, setOffset] = useState(0);
   const [draggingNow, setDraggingNow] = useState(false);
 
@@ -750,9 +753,12 @@ function SwipeCartItem({
 
   function onPointerDown(event: ReactPointerEvent<HTMLDivElement>) {
     if (event.button !== 0 && event.pointerType === 'mouse') return;
+    // Ignore presses on action buttons (delete)
+    if ((event.target as HTMLElement).closest('button')) return;
     startX.current = event.clientX;
     startY.current = event.clientY;
     dragging.current = true;
+    moved.current = false;
     setDraggingNow(true);
     setOffset(revealed);
     event.currentTarget.setPointerCapture(event.pointerId);
@@ -762,6 +768,7 @@ function SwipeCartItem({
     if (!dragging.current) return;
     const dx = event.clientX - startX.current;
     const dy = event.clientY - startY.current;
+    if (Math.abs(dx) > 6 || Math.abs(dy) > 6) moved.current = true;
     if (Math.abs(dy) > Math.abs(dx) && Math.abs(dy) > 8) {
       // scroll vertical: cancel swipe
       dragging.current = false;
@@ -779,6 +786,18 @@ function SwipeCartItem({
     dragging.current = false;
     setDraggingNow(false);
     const shouldOpen = offset <= -SWIPE_DELETE_WIDTH / 2;
+    const wasTap = !moved.current && Math.abs(offset - revealed) < 8;
+
+    if (wasTap) {
+      if (open) {
+        onOpenChange(false);
+      } else {
+        onEdit();
+      }
+      setOffset(0);
+      return;
+    }
+
     onOpenChange(shouldOpen);
     setOffset(0);
   }
@@ -794,13 +813,21 @@ function SwipeCartItem({
         <Trash2 size={18} />
       </button>
       <div
-        className="cart-item cart-swipe-front"
+        className="cart-item cart-swipe-front cart-item-clickable"
         style={{ transform: `translateX(${translateX}px)` }}
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
         onPointerUp={endPointer}
         onPointerCancel={endPointer}
-        onDoubleClick={onEdit}
+        role="button"
+        tabIndex={0}
+        aria-label="Editar bowl"
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            onEdit();
+          }
+        }}
       >
         {children}
       </div>
