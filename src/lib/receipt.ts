@@ -1,6 +1,8 @@
 import { IVA_RATE, formatEUR, ivaFromGross, netFromGross, round2 } from './utils';
 import type { Order, OrderLine } from '../types';
 
+export const FROM_EMAIL = 'info.tropicboost@gmail.com';
+
 export interface ReceiptTotals {
   subtotal: number;
   lineDiscounts: number;
@@ -21,7 +23,6 @@ export function receiptTotals(order: Order): ReceiptTotals {
       0,
     ),
   );
-  // Prefer stored subtotal/discount/total when present
   const subtotal = order.subtotal || grossLines;
   const orderDiscount = order.discount || 0;
   const total = order.total;
@@ -42,7 +43,7 @@ export function buildReceiptText(order: Order, eventName?: string): string {
     .join('\n\n');
 
   return [
-    'TROPIC BOOST · Recibo de pedido',
+    'TROPIC BOOST · Ticket de pedido',
     eventName ? `Evento: ${eventName}` : '',
     `Pedido #${order.number}`,
     `Cliente: ${order.customerName}`,
@@ -66,7 +67,7 @@ export function buildReceiptText(order: Order, eventName?: string): string {
     `TOTAL: ${formatEUR(totals.total)}`,
     '',
     'Gracias por tu pedido · Tropic Boost',
-    'info.tropicboost@gmail.com',
+    FROM_EMAIL,
   ]
     .filter((row) => row !== '')
     .join('\n');
@@ -88,47 +89,50 @@ function formatLine(line: OrderLine, index: number): string {
     .join('\n');
 }
 
+async function copyTicket(text: string): Promise<boolean> {
+  try {
+    await navigator.clipboard.writeText(text);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** Abre Gmail con el ticket listo para enviar desde la cuenta de Tropic Boost. */
 export async function sendReceiptEmail(input: {
   to: string;
   order: Order;
   eventName?: string;
-}): Promise<{ ok: boolean; mode: 'emailjs' | 'mailto'; message: string }> {
-  const subject = `Tropic Boost · Recibo pedido #${input.order.number}`;
+}): Promise<{ ok: boolean; mode: 'gmail'; message: string }> {
+  const subject = `Tropic Boost · Ticket pedido #${input.order.number}`;
   const body = buildReceiptText(input.order, input.eventName);
-  const serviceId = import.meta.env.VITE_EMAILJS_SERVICE_ID as string | undefined;
-  const templateId = import.meta.env.VITE_EMAILJS_TEMPLATE_ID as string | undefined;
-  const publicKey = import.meta.env.VITE_EMAILJS_PUBLIC_KEY as string | undefined;
+  const copied = await copyTicket(body);
 
-  if (serviceId && templateId && publicKey) {
-    const { default: emailjs } = await import('@emailjs/browser');
-    await emailjs.send(
-      serviceId,
-      templateId,
-      {
-        to_email: input.to,
-        from_name: 'Tropic Boost',
-        reply_to: 'info.tropicboost@gmail.com',
-        subject,
-        message: body,
-        order_number: String(input.order.number),
-        customer_name: input.order.customerName,
-        total: formatEUR(input.order.total),
-      },
-      { publicKey },
-    );
-    return {
-      ok: true,
-      mode: 'emailjs',
-      message: `Recibo enviado a ${input.to}`,
-    };
-  }
+  // Gmail limita la longitud de la URL; si el ticket es largo, el cuerpo va en el portapapeles.
+  const maxBodyLen = 1600;
+  const bodyForUrl =
+    body.length <= maxBodyLen
+      ? body
+      : `${body.slice(0, maxBodyLen)}\n\n…\n(Ticket completo en el portapapeles: pégalo con Cmd+V)`;
 
-  const mailto = `mailto:${encodeURIComponent(input.to)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}&bcc=${encodeURIComponent('info.tropicboost@gmail.com')}`;
-  window.open(mailto, '_blank');
+  const params = new URLSearchParams({
+    view: 'cm',
+    fs: '1',
+    tf: '1',
+    to: input.to,
+    su: subject,
+    body: bodyForUrl,
+  });
+
+  // Fuerza la cuenta de Tropic Boost si hay varias sesiones de Google abiertas
+  const gmailUrl = `https://mail.google.com/mail/?${params.toString()}&authuser=${encodeURIComponent(FROM_EMAIL)}`;
+  window.open(gmailUrl, '_blank', 'noopener,noreferrer');
+
   return {
     ok: true,
-    mode: 'mailto',
-    message:
-      'Se abrió el correo con el recibo. Envíalo desde info.tropicboost@gmail.com (o configura EmailJS para envío automático).',
+    mode: 'gmail',
+    message: copied
+      ? `Ticket listo en Gmail para ${input.to}. Usa la cuenta ${FROM_EMAIL} y pulsa Enviar. (También copiado al portapapeles.)`
+      : `Ticket listo en Gmail para ${input.to}. Usa la cuenta ${FROM_EMAIL} y pulsa Enviar.`,
   };
 }

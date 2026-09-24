@@ -1,7 +1,7 @@
 import { CheckCircle2, Mail, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 import { Modal } from './ui';
-import { sendReceiptEmail } from '../lib/receipt';
+import { sendReceiptEmail, FROM_EMAIL } from '../lib/receipt';
 import { useStore } from '../lib/store';
 import {
   formatEUR,
@@ -117,7 +117,7 @@ export function OrderDetailModal({
         </div>
 
         <div className="field">
-          <label htmlFor="receipt-email">Enviar recibo por email</label>
+          <label htmlFor="receipt-email">Enviar ticket por Gmail</label>
           <div className="discount-row">
             <input
               id="receipt-email"
@@ -132,10 +132,14 @@ export function OrderDetailModal({
               disabled={sending}
               onClick={handleSendReceipt}
             >
-              <Mail size={16} /> {sending ? 'Enviando…' : 'Enviar'}
+              <Mail size={16} /> {sending ? 'Abriendo…' : 'Abrir en Gmail'}
             </button>
           </div>
           {emailNote && <p className="builder-status complete">{emailNote}</p>}
+          <p className="muted" style={{ marginTop: '0.35rem', fontSize: '0.8rem' }}>
+            Se abre Gmail con el ticket (productos + IVA). Envíalo desde{' '}
+            {FROM_EMAIL}.
+          </p>
         </div>
 
         <div className="modal-actions order-detail-actions">

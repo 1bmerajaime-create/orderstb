@@ -174,7 +174,7 @@ export function NewOrderPage() {
   async function submit() {
     if (lines.length === 0 || !allComplete || submitting) return;
     if (sendEmail && !customerEmail.trim()) {
-      setEmailNote('Indica el email del cliente para enviar el recibo.');
+      setEmailNote('Indica el email del cliente para abrir el ticket en Gmail.');
       return;
     }
     setSubmitting(true);
@@ -258,7 +258,7 @@ export function NewOrderPage() {
                 checked={sendEmail}
                 onChange={(e) => setSendEmail(e.target.checked)}
               />
-              <Mail size={15} /> Enviar recibo por email (desglose + IVA)
+              <Mail size={15} /> Abrir ticket en Gmail al crear el pedido
             </label>
 
             <p className="order-modal-label">Catálogo</p>
