@@ -11,6 +11,7 @@ export function Modal({
   wide,
   className,
   headerActions,
+  footer,
 }: {
   title: string;
   children: ReactNode;
@@ -18,6 +19,7 @@ export function Modal({
   wide?: boolean;
   className?: string;
   headerActions?: ReactNode;
+  footer?: ReactNode;
 }) {
   useEffect(() => {
     const prev = document.body.style.overflow;
@@ -30,7 +32,7 @@ export function Modal({
   return (
     <div className="modal-backdrop" onClick={onClose} role="presentation">
       <div
-        className={`modal${wide ? ' wide' : ''}${className ? ` ${className}` : ''}`}
+        className={`modal${wide ? ' wide' : ''}${className ? ` ${className}` : ''}${footer ? ' has-footer' : ''}`}
         onClick={(e) => e.stopPropagation()}
         role="dialog"
         aria-modal="true"
@@ -46,6 +48,7 @@ export function Modal({
           </div>
         </div>
         <div className="modal-body">{children}</div>
+        {footer && <div className="modal-footer">{footer}</div>}
       </div>
     </div>
   );

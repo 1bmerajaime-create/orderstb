@@ -661,6 +661,19 @@ tbody tr.row-clickable:hover td {
   max-height: calc(92dvh - 4.5rem);
 }
 
+.modal.has-footer .modal-body {
+  max-height: none;
+  padding-bottom: 1rem;
+}
+
+.modal-footer {
+  flex-shrink: 0;
+  padding: 0.85rem 1.35rem calc(0.85rem + env(safe-area-inset-bottom, 0px));
+  border-top: 1px solid var(--line);
+  background: rgba(14, 6, 24, 0.92);
+  backdrop-filter: blur(10px);
+}
+
 .modal-header h3 {
   font-size: 1.2rem;
 }
@@ -1753,6 +1766,37 @@ tbody tr.row-clickable:hover td {
   display: flex;
   flex-direction: column;
   gap: 1.1rem;
+}
+
+.bowl-modal-footer {
+  display: flex;
+  width: 100%;
+}
+
+.bowl-modal-confirm {
+  width: 100%;
+  justify-content: center;
+}
+
+.link-secondary {
+  appearance: none;
+  border: none;
+  background: none;
+  padding: 0;
+  margin: 0;
+  align-self: flex-start;
+  color: var(--ink-soft);
+  font: inherit;
+  font-size: 0.8rem;
+  text-decoration: underline;
+  text-underline-offset: 0.15em;
+  cursor: pointer;
+  opacity: 0.75;
+}
+
+.link-secondary:hover {
+  opacity: 1;
+  color: var(--ink);
 }
 
 .custom-builder-heading,

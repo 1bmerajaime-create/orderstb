@@ -466,6 +466,18 @@ function BowlConfigModal({
       onClose={onCancel}
       wide
       className="bowl-modal"
+      footer={
+        <div className="bowl-modal-footer">
+          <button
+            type="button"
+            className="btn btn-primary btn-lg bowl-modal-confirm"
+            disabled={!complete}
+            onClick={onConfirm}
+          >
+            {confirmLabel}
+          </button>
+        </div>
+      }
     >
       <div className="custom-builder-heading">
         <div>
@@ -581,7 +593,7 @@ function BowlConfigModal({
       {bowl.productId !== CUSTOM_PRODUCT_ID && (
         <button
           type="button"
-          className="btn btn-ghost"
+          className="link-secondary"
           onClick={() =>
             onChange({
               solids: [...bowl.baseRecipe.solids],
@@ -594,20 +606,6 @@ function BowlConfigModal({
           Restaurar receta
         </button>
       )}
-
-      <div className="modal-actions">
-        <button type="button" className="btn btn-ghost" onClick={onCancel}>
-          Cancelar
-        </button>
-        <button
-          type="button"
-          className="btn btn-primary btn-lg"
-          disabled={!complete}
-          onClick={onConfirm}
-        >
-          {confirmLabel}
-        </button>
-      </div>
     </Modal>
   );
 }
