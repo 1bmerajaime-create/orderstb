@@ -546,8 +546,11 @@ function BowlConfigModal({
       </div>
 
       <div className="builder-section builder-section-discount">
-        <div className="discount-inline">
-          <strong className="discount-inline-label">Descuento</strong>
+        <div className="builder-section-head">
+          <strong>Descuento</strong>
+          <span>Solo este bowl</span>
+        </div>
+        <div className="discount-compact">
           <select
             aria-label="Tipo de descuento"
             value={bowl.discountType}
@@ -581,27 +584,28 @@ function BowlConfigModal({
               <span>{bowl.discountType === 'percent' ? '%' : '€'}</span>
             </div>
           )}
-          {bowl.productId !== CUSTOM_PRODUCT_ID && (
-            <button
-              type="button"
-              className="link-secondary discount-restore"
-              onClick={() =>
-                onChange({
-                  solids: [...bowl.baseRecipe.solids],
-                  softs: [...bowl.baseRecipe.softs],
-                  fruits: [...bowl.baseRecipe.fruits],
-                  whey: bowl.baseRecipe.whey,
-                })
-              }
-            >
-              Restaurar receta
-            </button>
-          )}
         </div>
         {discount > 0 && (
           <p className="discount-preview">−{formatEUR(discount)} en este bowl</p>
         )}
       </div>
+
+      {bowl.productId !== CUSTOM_PRODUCT_ID && (
+        <button
+          type="button"
+          className="btn btn-ghost btn-sm restore-recipe-btn"
+          onClick={() =>
+            onChange({
+              solids: [...bowl.baseRecipe.solids],
+              softs: [...bowl.baseRecipe.softs],
+              fruits: [...bowl.baseRecipe.fruits],
+              whey: bowl.baseRecipe.whey,
+            })
+          }
+        >
+          Restaurar receta
+        </button>
+      )}
     </Modal>
   );
 }
