@@ -1994,7 +1994,6 @@ tbody tr.row-clickable:hover td {
 .discount-compact select {
   flex: 1;
   min-width: 0;
-  max-width: 11.5rem;
   padding: 0.45rem 0.6rem;
   border-radius: 8px;
   border: 1px solid rgba(251, 191, 36, 0.28);
@@ -2003,6 +2002,15 @@ tbody tr.row-clickable:hover td {
   font: inherit;
   font-size: 0.85rem;
   font-weight: 600;
+}
+
+.discount-promo-select {
+  max-width: none !important;
+}
+
+.muted-note {
+  color: var(--ink-soft) !important;
+  font-weight: 500 !important;
 }
 
 .discount-compact select:focus {

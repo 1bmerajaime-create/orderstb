@@ -33,7 +33,13 @@ import {
   netFromGross,
   uid,
 } from '../lib/utils';
-import type { Order, OrderLine, PaymentMethod, Product } from '../types';
+import type {
+  Order,
+  OrderLine,
+  PaymentMethod,
+  Product,
+  Promotion,
+} from '../types';
 
 interface DraftBowl extends BowlConfig {
   id: string;
@@ -41,6 +47,7 @@ interface DraftBowl extends BowlConfig {
   productName: string;
   basePrice: number;
   baseRecipe: BowlConfig;
+  promotionId?: string;
   discountType: LineDiscountType;
   discountValue: number;
 }
@@ -83,6 +90,7 @@ export function NewOrderPage() {
           bowl.discountType,
           bowl.discountValue,
         );
+        const promo = data.promotions.find((p) => p.id === bowl.promotionId);
         return {
           productId: bowl.productId,
           productName: bowl.productName,
@@ -90,12 +98,22 @@ export function NewOrderPage() {
           unitPrice: net,
           baseUnitPrice: gross,
           lineDiscount: discount,
+          promotionId: bowl.promotionId,
+          promotionName: promo?.name,
           ingredients: bowlIngredients(config),
           customized:
             bowl.productId !== CUSTOM_PRODUCT_ID && isCustomized(bowl),
         };
       }),
-    [bowls],
+    [bowls, data.promotions],
+  );
+
+  const bowlPromotions = useMemo(
+    () =>
+      data.promotions.filter(
+        (promo) => promo.type === 'percent' || promo.type === 'fixed',
+      ),
+    [data.promotions],
   );
 
   const subtotal = calcSubtotal(lines);
@@ -133,6 +151,7 @@ export function NewOrderPage() {
       softs: [...recipe.softs],
       fruits: [...recipe.fruits],
       whey: recipe.whey,
+      promotionId: undefined,
       discountType: 'none',
       discountValue: 0,
     };
@@ -316,9 +335,12 @@ export function NewOrderPage() {
                           <strong>{bowl.productName}</strong>
                           <span>{formatEUR(net)}</span>
                         </div>
-                        {bowl.discountType !== 'none' &&
-                          bowl.discountValue > 0 && (
-                            <span className="customized-badge">Dto.</span>
+                        {bowl.promotionId && bowl.discountValue > 0 && (
+                            <span className="customized-badge">
+                              {data.promotions.find(
+                                (p) => p.id === bowl.promotionId,
+                              )?.name || 'Dto.'}
+                            </span>
                           )}
                         {!complete && (
                           <span className="builder-status">Sin completar</span>
@@ -407,6 +429,7 @@ export function NewOrderPage() {
       {draft && (
         <BowlConfigModal
           bowl={draft.bowl}
+          promotions={bowlPromotions}
           confirmLabel={draft.mode === 'new' ? 'Añadir al pedido' : 'Guardar'}
           onChange={updateDraft}
           onConfirm={confirmDraft}
@@ -428,12 +451,14 @@ export function NewOrderPage() {
 
 function BowlConfigModal({
   bowl,
+  promotions,
   onChange,
   onConfirm,
   onCancel,
   confirmLabel,
 }: {
   bowl: DraftBowl;
+  promotions: Promotion[];
   onChange: (patch: Partial<DraftBowl>) => void;
   onConfirm: () => void;
   onCancel: () => void;
@@ -459,6 +484,25 @@ function BowlConfigModal({
     bowl.discountType,
     bowl.discountValue,
   );
+  const selectedPromo = promotions.find((p) => p.id === bowl.promotionId);
+
+  function applyPromotion(promotionId: string) {
+    if (!promotionId) {
+      onChange({
+        promotionId: undefined,
+        discountType: 'none',
+        discountValue: 0,
+      });
+      return;
+    }
+    const promo = promotions.find((item) => item.id === promotionId);
+    if (!promo) return;
+    onChange({
+      promotionId: promo.id,
+      discountType: promo.type === 'fixed' ? 'fixed' : 'percent',
+      discountValue: promo.value,
+    });
+  }
 
   return (
     <Modal
@@ -548,45 +592,35 @@ function BowlConfigModal({
       <div className="builder-section builder-section-discount">
         <div className="builder-section-head">
           <strong>Descuento</strong>
-          <span>Solo este bowl</span>
+          <span>Promociones del sistema</span>
         </div>
         <div className="discount-compact">
           <select
-            aria-label="Tipo de descuento"
-            value={bowl.discountType}
-            onChange={(e) =>
-              onChange({
-                discountType: e.target.value as LineDiscountType,
-                discountValue:
-                  e.target.value === 'none' ? 0 : bowl.discountValue,
-              })
-            }
+            aria-label="Descuento"
+            className="discount-promo-select"
+            value={bowl.promotionId || ''}
+            onChange={(e) => applyPromotion(e.target.value)}
           >
-            <option value="none">Sin descuento</option>
-            <option value="percent">Porcentaje %</option>
-            <option value="fixed">Importe €</option>
+            <option value="">Sin descuento</option>
+            {promotions.map((promo) => (
+              <option key={promo.id} value={promo.id}>
+                {promo.name}
+                {promo.type === 'percent'
+                  ? ` (−${promo.value}%)`
+                  : ` (−${formatEUR(promo.value)})`}
+              </option>
+            ))}
           </select>
-          {bowl.discountType !== 'none' && (
-            <div className="discount-value-input">
-              <input
-                type="number"
-                min="0"
-                step={bowl.discountType === 'percent' ? '1' : '0.01'}
-                value={bowl.discountValue || ''}
-                onChange={(e) =>
-                  onChange({ discountValue: Number(e.target.value) || 0 })
-                }
-                placeholder="0"
-                aria-label={
-                  bowl.discountType === 'percent' ? 'Porcentaje' : 'Importe'
-                }
-              />
-              <span>{bowl.discountType === 'percent' ? '%' : '€'}</span>
-            </div>
-          )}
         </div>
-        {discount > 0 && (
-          <p className="discount-preview">−{formatEUR(discount)} en este bowl</p>
+        {promotions.length === 0 && (
+          <p className="discount-preview muted-note">
+            No hay promociones. Créalas en el panel principal.
+          </p>
+        )}
+        {discount > 0 && selectedPromo && (
+          <p className="discount-preview">
+            {selectedPromo.name}: −{formatEUR(discount)}
+          </p>
         )}
       </div>
 

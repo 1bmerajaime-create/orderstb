@@ -78,7 +78,7 @@ function formatLine(line: OrderLine, index: number): string {
   const ingredients = (line.ingredients || []).join(', ');
   const discount =
     line.lineDiscount && line.lineDiscount > 0
-      ? ` (dto. −${formatEUR(line.lineDiscount)})`
+      ? ` (dto.${line.promotionName ? ` ${line.promotionName}` : ''} −${formatEUR(line.lineDiscount)})`
       : '';
   return [
     `${index}. ${line.quantity}× ${line.productName}${discount}`,

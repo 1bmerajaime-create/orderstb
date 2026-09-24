@@ -67,6 +67,9 @@ export interface OrderLine {
   baseUnitPrice?: number;
   /** Descuento aplicado a esta línea (importe). */
   lineDiscount?: number;
+  /** Promoción de sistema aplicada a esta línea. */
+  promotionId?: string;
+  promotionName?: string;
   /** Foto de los ingredientes elegidos en el momento de crear el pedido. */
   ingredients?: string[];
   /** La receta preestablecida se modificó para este bowl. */
