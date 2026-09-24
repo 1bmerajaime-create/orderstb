@@ -538,37 +538,25 @@ function BowlConfigModal({
           <strong>Descuento</strong>
           <span>Solo este bowl</span>
         </div>
-        <div className="discount-toggle">
-          {(
-            [
-              ['none', 'Ninguno'],
-              ['percent', '%'],
-              ['fixed', '€'],
-            ] as const
-          ).map(([id, label]) => (
-            <button
-              key={id}
-              type="button"
-              className={`discount-toggle-btn${bowl.discountType === id ? ' active' : ''}`}
-              onClick={() =>
-                onChange({
-                  discountType: id,
-                  discountValue: id === 'none' ? 0 : bowl.discountValue,
-                })
-              }
-            >
-              {label}
-            </button>
-          ))}
-        </div>
-        {bowl.discountType !== 'none' && (
-          <div className="discount-value-row">
-            <label htmlFor="bowl-discount-value">
-              {bowl.discountType === 'percent' ? 'Porcentaje' : 'Importe'}
-            </label>
+        <div className="discount-compact">
+          <select
+            aria-label="Tipo de descuento"
+            value={bowl.discountType}
+            onChange={(e) =>
+              onChange({
+                discountType: e.target.value as LineDiscountType,
+                discountValue:
+                  e.target.value === 'none' ? 0 : bowl.discountValue,
+              })
+            }
+          >
+            <option value="none">Sin descuento</option>
+            <option value="percent">Porcentaje %</option>
+            <option value="fixed">Importe €</option>
+          </select>
+          {bowl.discountType !== 'none' && (
             <div className="discount-value-input">
               <input
-                id="bowl-discount-value"
                 type="number"
                 min="0"
                 step={bowl.discountType === 'percent' ? '1' : '0.01'}
@@ -577,12 +565,14 @@ function BowlConfigModal({
                   onChange({ discountValue: Number(e.target.value) || 0 })
                 }
                 placeholder="0"
-                autoFocus
+                aria-label={
+                  bowl.discountType === 'percent' ? 'Porcentaje' : 'Importe'
+                }
               />
               <span>{bowl.discountType === 'percent' ? '%' : '€'}</span>
             </div>
-          </div>
-        )}
+          )}
+        </div>
         {discount > 0 && (
           <p className="discount-preview">−{formatEUR(discount)} en este bowl</p>
         )}

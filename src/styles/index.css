@@ -1941,61 +1941,39 @@ tbody tr.row-clickable:hover td {
   );
 }
 
-.discount-toggle {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 0.35rem;
-  padding: 0.25rem;
-  border-radius: 10px;
-  background: rgba(0, 0, 0, 0.28);
-  border: 1px solid var(--line);
-}
-
-.discount-toggle-btn {
-  appearance: none;
-  border: none;
-  background: transparent;
-  color: var(--ink-soft);
-  font: inherit;
-  font-weight: 700;
-  font-size: 0.85rem;
-  padding: 0.5rem 0.4rem;
-  border-radius: 8px;
-  cursor: pointer;
-  transition:
-    background 0.15s var(--ease),
-    color 0.15s var(--ease);
-}
-
-.discount-toggle-btn:hover {
-  color: var(--ink);
-  background: rgba(255, 255, 255, 0.05);
-}
-
-.discount-toggle-btn.active {
-  background: rgba(251, 191, 36, 0.22);
-  color: #fde68a;
-  box-shadow: inset 0 0 0 1px rgba(251, 191, 36, 0.35);
-}
-
-.discount-value-row {
+.discount-compact {
   display: flex;
-  flex-direction: column;
-  gap: 0.35rem;
-  margin-top: 0.15rem;
+  align-items: center;
+  gap: 0.45rem;
 }
 
-.discount-value-row label {
-  font-size: 0.75rem;
-  color: var(--ink-soft);
+.discount-compact select {
+  flex: 1;
+  min-width: 0;
+  max-width: 11.5rem;
+  padding: 0.45rem 0.6rem;
+  border-radius: 8px;
+  border: 1px solid rgba(251, 191, 36, 0.28);
+  background: rgba(14, 6, 24, 0.55);
+  color: var(--ink);
+  font: inherit;
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.discount-compact select:focus {
+  outline: none;
+  border-color: rgba(251, 191, 36, 0.55);
 }
 
 .discount-value-input {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
-  padding: 0.15rem 0.75rem 0.15rem 0.15rem;
-  border-radius: 10px;
+  gap: 0.35rem;
+  flex: 0 0 auto;
+  width: 5.5rem;
+  padding: 0.1rem 0.5rem 0.1rem 0.1rem;
+  border-radius: 8px;
   border: 1px solid rgba(251, 191, 36, 0.3);
   background: rgba(14, 6, 24, 0.55);
 }
@@ -2003,13 +1981,14 @@ tbody tr.row-clickable:hover td {
 .discount-value-input input {
   flex: 1;
   min-width: 0;
+  width: 100%;
   border: none;
   background: transparent;
   color: var(--ink);
   font: inherit;
-  font-size: 1.05rem;
+  font-size: 0.9rem;
   font-weight: 700;
-  padding: 0.55rem 0.65rem;
+  padding: 0.4rem 0.45rem;
 }
 
 .discount-value-input input:focus {
@@ -2019,12 +1998,12 @@ tbody tr.row-clickable:hover td {
 .discount-value-input span {
   font-weight: 800;
   color: #fde68a;
-  font-size: 0.95rem;
+  font-size: 0.82rem;
 }
 
 .discount-preview {
   margin: 0;
-  font-size: 0.8rem;
+  font-size: 0.78rem;
   font-weight: 700;
   color: #fde68a;
 }
