@@ -118,6 +118,16 @@ function BowlLineCard({
   const config = parseRecipe(ingredients);
   const base = ingredients.find((item) => /a[cç]a[ií]/i.test(item)) || 'Açaí';
 
+  const groups = [
+    { kind: 'base', label: 'Base', values: [base] },
+    { kind: 'fruta', label: 'Fruta', values: config.fruits },
+    { kind: 'blando', label: 'Blando', values: config.softs },
+    { kind: 'duro', label: 'Duro', values: config.solids },
+    ...(config.whey
+      ? [{ kind: 'extra', label: 'Extra', values: [WHEY] }]
+      : []),
+  ];
+
   return (
     <article className="order-detail-line">
       <div className="order-detail-line-head">
@@ -129,33 +139,27 @@ function BowlLineCard({
         </strong>
       </div>
       <div className="bowl-breakdown">
-        <BreakdownRow kind="base" label="Base" values={[base]} />
-        <BreakdownRow kind="fruta" label="Fruta" values={config.fruits} />
-        <BreakdownRow kind="blando" label="Blando" values={config.softs} />
-        <BreakdownRow kind="duro" label="Duro" values={config.solids} />
-        {config.whey && (
-          <BreakdownRow kind="extra" label="Extra" values={[WHEY]} />
-        )}
+        {groups.map((group) => (
+          <div
+            key={group.kind}
+            className={`bowl-breakdown-col bowl-breakdown-${group.kind}`}
+          >
+            <span className="bowl-breakdown-label">{group.label}</span>
+            <div className="bowl-breakdown-chips">
+              {group.values.length > 0 ? (
+                group.values.map((value) => (
+                  <span key={value} className="bowl-chip">
+                    {value}
+                  </span>
+                ))
+              ) : (
+                <span className="bowl-chip muted">—</span>
+              )}
+            </div>
+          </div>
+        ))}
       </div>
     </article>
-  );
-}
-
-function BreakdownRow({
-  kind,
-  label,
-  values,
-}: {
-  kind: string;
-  label: string;
-  values: string[];
-}) {
-  if (!values.length) return null;
-  return (
-    <div className={`bowl-breakdown-row bowl-breakdown-${kind}`}>
-      <span className="bowl-breakdown-label">{label}</span>
-      <span className="bowl-breakdown-values">{values.join(' · ')}</span>
-    </div>
   );
 }
 
