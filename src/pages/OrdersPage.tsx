@@ -20,10 +20,7 @@ export function OrdersPage() {
     () =>
       data.orders
         .filter((o) => o.eventId === eventId)
-        .sort(
-          (a, b) =>
-            new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
-        ),
+        .sort((a, b) => a.number - b.number),
     [data.orders, eventId],
   );
 

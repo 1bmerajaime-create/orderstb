@@ -10,12 +10,14 @@ export function Modal({
   onClose,
   wide,
   className,
+  headerActions,
 }: {
   title: string;
   children: ReactNode;
   onClose: () => void;
   wide?: boolean;
   className?: string;
+  headerActions?: ReactNode;
 }) {
   useEffect(() => {
     const prev = document.body.style.overflow;
@@ -36,9 +38,12 @@ export function Modal({
       >
         <div className="modal-header">
           <h3>{title}</h3>
-          <button className="icon-btn" onClick={onClose} aria-label="Cerrar">
-            <X size={18} />
-          </button>
+          <div className="modal-header-actions">
+            {headerActions}
+            <button className="icon-btn" onClick={onClose} aria-label="Cerrar">
+              <X size={18} />
+            </button>
+          </div>
         </div>
         <div className="modal-body">{children}</div>
       </div>

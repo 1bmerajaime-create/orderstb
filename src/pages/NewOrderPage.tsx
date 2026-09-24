@@ -1,6 +1,7 @@
-import { Mail, Minus, Pencil, Plus, Trash2, X } from 'lucide-react';
+import { Pencil, Plus, Trash2, X } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { Navigate, useNavigate, useParams } from 'react-router-dom';
+import { TicketModal } from '../components/OrderDetailModal';
 import { Modal } from '../components/ui';
 import {
   CUSTOM_PRODUCT_ID,
@@ -24,18 +25,15 @@ import {
   type BowlConfig,
   type LineDiscountType,
 } from '../lib/bowl';
-import { sendReceiptEmail } from '../lib/receipt';
 import { useStore } from '../lib/store';
 import {
-  calcDiscount,
   calcSubtotal,
   formatEUR,
   ivaFromGross,
   netFromGross,
-  round2,
   uid,
 } from '../lib/utils';
-import type { OrderLine, PaymentMethod, Product } from '../types';
+import type { Order, OrderLine, PaymentMethod, Product } from '../types';
 
 interface DraftBowl extends BowlConfig {
   id: string;
@@ -54,17 +52,12 @@ export function NewOrderPage() {
   const event = data.events.find((e) => e.id === eventId);
 
   const [customerName, setCustomerName] = useState('');
-  const [customerEmail, setCustomerEmail] = useState('');
-  const [sendEmail, setSendEmail] = useState(false);
   const [bowls, setBowls] = useState<DraftBowl[]>([]);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [promotionId, setPromotionId] = useState('');
-  const [orderDiscountType, setOrderDiscountType] =
-    useState<LineDiscountType>('none');
-  const [orderDiscountValue, setOrderDiscountValue] = useState(0);
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('tarjeta');
   const [submitting, setSubmitting] = useState(false);
-  const [emailNote, setEmailNote] = useState('');
+  const [submitError, setSubmitError] = useState('');
+  const [createdOrder, setCreatedOrder] = useState<Order | null>(null);
 
   const editingBowl = bowls.find((bowl) => bowl.id === editingId) || null;
 
@@ -104,18 +97,8 @@ export function NewOrderPage() {
     [bowls],
   );
 
-  const promo = data.promotions.find((item) => item.id === promotionId);
   const subtotal = calcSubtotal(lines);
-  const promoDiscount = calcDiscount(lines, promo);
-  const manualOrderDiscount = lineDiscountAmount(
-    Math.max(0, subtotal - promoDiscount),
-    orderDiscountType,
-    orderDiscountValue,
-  );
-  const discount = round2(
-    Math.min(subtotal, promoDiscount + manualOrderDiscount),
-  );
-  const total = round2(Math.max(0, subtotal - discount));
+  const total = subtotal;
   const allComplete = bowls.every((bowl) =>
     isBowlComplete({
       solids: bowl.solids,
@@ -137,7 +120,12 @@ export function NewOrderPage() {
       productId: product.id,
       productName: product.name,
       basePrice: Number(product.price) || 0,
-      baseRecipe: { ...recipe, solids: [...recipe.solids], softs: [...recipe.softs], fruits: [...recipe.fruits] },
+      baseRecipe: {
+        ...recipe,
+        solids: [...recipe.solids],
+        softs: [...recipe.softs],
+        fruits: [...recipe.fruits],
+      },
       solids: [...recipe.solids],
       softs: [...recipe.softs],
       fruits: [...recipe.fruits],
@@ -160,51 +148,29 @@ export function NewOrderPage() {
     if (editingId === id) setEditingId(null);
   }
 
-  function removeOneOf(productId: string) {
-    const removeIndex = [...bowls]
-      .map((bowl, i) => ({ id: bowl.id, productId: bowl.productId, i }))
-      .reverse()
-      .find((item) => item.productId === productId)?.i;
-    if (removeIndex == null) return;
-    const removedId = bowls[removeIndex].id;
-    if (editingId === removedId) setEditingId(null);
-    setBowls((current) => current.filter((_, i) => i !== removeIndex));
-  }
-
   async function submit() {
     if (lines.length === 0 || !allComplete || submitting) return;
-    if (sendEmail && !customerEmail.trim()) {
-      setEmailNote('Indica el email del cliente para abrir el ticket en Gmail.');
-      return;
-    }
     setSubmitting(true);
-    setEmailNote('');
+    setSubmitError('');
     try {
       const order = await createOrder({
         eventId: event!.id,
         customerName,
-        customerEmail: customerEmail.trim() || undefined,
         lines,
-        promotionId: promotionId || undefined,
         paymentMethod,
         paid: true,
-        extraDiscount: manualOrderDiscount,
       });
-      if (sendEmail && customerEmail.trim()) {
-        const result = await sendReceiptEmail({
-          to: customerEmail.trim(),
-          order,
-          eventName: event!.name,
-        });
-        setEmailNote(result.message);
-      }
-      navigate(`/evento/${event!.id}/pedidos`);
+      setCreatedOrder(order);
     } catch (error) {
-      setEmailNote(
+      setSubmitError(
         error instanceof Error ? error.message : 'No se pudo crear el pedido',
       );
       setSubmitting(false);
     }
+  }
+
+  function finishAndLeave() {
+    navigate(`/evento/${event!.id}`, { replace: true });
   }
 
   function closePage() {
@@ -241,65 +207,29 @@ export function NewOrderPage() {
               />
             </div>
 
-            <div className="field field-compact">
-              <label htmlFor="order-email">Email del cliente</label>
-              <input
-                id="order-email"
-                type="email"
-                placeholder="cliente@email.com"
-                value={customerEmail}
-                onChange={(e) => setCustomerEmail(e.target.value)}
-              />
-            </div>
-
-            <label className="check-row field-compact">
-              <input
-                type="checkbox"
-                checked={sendEmail}
-                onChange={(e) => setSendEmail(e.target.checked)}
-              />
-              <Mail size={15} /> Abrir ticket en Gmail al crear el pedido
-            </label>
-
-            <p className="order-modal-label">Catálogo</p>
-            <div className="product-picker">
+            <p className="order-modal-label">Añadir bowl</p>
+            <div className="product-picker product-picker-compact">
               {data.products.map((product) => {
                 const count = bowls.filter(
                   (bowl) => bowl.productId === product.id,
                 ).length;
                 const unitPrice = Number(product.price) || 0;
                 return (
-                  <div
+                  <button
                     key={product.id}
-                    className={`picker-tile${count > 0 ? ' selected' : ''}`}
+                    type="button"
+                    className={`picker-chip${count > 0 ? ' selected' : ''}`}
+                    onClick={() => addBowl(product)}
                   >
-                    <div className="picker-tile-info">
-                      <strong>{product.name}</strong>
-                      <span className="picker-price">
-                        {formatEUR(unitPrice)}
-                      </span>
-                    </div>
-                    <div className="picker-counter">
-                      <button
-                        type="button"
-                        className="picker-step"
-                        aria-label={`Quitar ${product.name}`}
-                        disabled={count === 0}
-                        onClick={() => removeOneOf(product.id)}
-                      >
-                        <Minus size={14} />
-                      </button>
-                      <span className="picker-count-value">{count}</span>
-                      <button
-                        type="button"
-                        className="picker-step"
-                        aria-label={`Añadir ${product.name}`}
-                        onClick={() => addBowl(product)}
-                      >
-                        <Plus size={14} />
-                      </button>
-                    </div>
-                  </div>
+                    <span className="picker-chip-name">{product.name}</span>
+                    <span className="picker-chip-meta">
+                      {formatEUR(unitPrice)}
+                      {count > 0 && (
+                        <span className="picker-chip-count">{count}</span>
+                      )}
+                    </span>
+                    <Plus size={14} className="picker-chip-plus" aria-hidden />
+                  </button>
                 );
               })}
             </div>
@@ -314,7 +244,7 @@ export function NewOrderPage() {
             {bowls.length === 0 ? (
               <div className="empty cart-empty">
                 <strong>Sin bowls</strong>
-                Añade productos desde el catálogo.
+                Toca un producto para añadirlo.
               </div>
             ) : (
               <div className="cart-list">
@@ -342,7 +272,7 @@ export function NewOrderPage() {
                         </div>
                         {bowl.discountType !== 'none' &&
                           bowl.discountValue > 0 && (
-                            <span className="customized-badge">Dto. línea</span>
+                            <span className="customized-badge">Dto.</span>
                           )}
                         {!complete && (
                           <span className="builder-status">Sin completar</span>
@@ -377,53 +307,6 @@ export function NewOrderPage() {
             )}
 
             <div className="field">
-              <label htmlFor="order-promo">Promoción (pedido)</label>
-              <select
-                id="order-promo"
-                value={promotionId}
-                onChange={(e) => setPromotionId(e.target.value)}
-              >
-                <option value="">Sin promoción</option>
-                {data.promotions.map((item) => (
-                  <option key={item.id} value={item.id}>
-                    {item.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div className="discount-row">
-              <div className="field">
-                <label htmlFor="order-discount-type">Dto. pedido</label>
-                <select
-                  id="order-discount-type"
-                  value={orderDiscountType}
-                  onChange={(e) =>
-                    setOrderDiscountType(e.target.value as LineDiscountType)
-                  }
-                >
-                  <option value="none">Ninguno</option>
-                  <option value="percent">%</option>
-                  <option value="fixed">€ fijo</option>
-                </select>
-              </div>
-              <div className="field">
-                <label htmlFor="order-discount-value">Valor</label>
-                <input
-                  id="order-discount-value"
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  disabled={orderDiscountType === 'none'}
-                  value={orderDiscountValue || ''}
-                  onChange={(e) =>
-                    setOrderDiscountValue(Number(e.target.value) || 0)
-                  }
-                />
-              </div>
-            </div>
-
-            <div className="field">
               <label>Método de pago</label>
               <div className="payment-grid">
                 {(
@@ -447,14 +330,6 @@ export function NewOrderPage() {
             <div className="cart-footer">
               <div className="totals totals-inline">
                 <div className="totals-row">
-                  <span>Subtotal</span>
-                  <span>{formatEUR(subtotal)}</span>
-                </div>
-                <div className="totals-row">
-                  <span>Descuento</span>
-                  <span>−{formatEUR(discount)}</span>
-                </div>
-                <div className="totals-row">
                   <span>Base (sin IVA)</span>
                   <span>{formatEUR(netFromGross(total))}</span>
                 </div>
@@ -467,7 +342,9 @@ export function NewOrderPage() {
                   <span>{formatEUR(total)}</span>
                 </div>
               </div>
-              {emailNote && <p className="builder-status">{emailNote}</p>}
+              {submitError && (
+                <p className="builder-status">{submitError}</p>
+              )}
               <button
                 type="button"
                 className="btn btn-primary btn-lg cart-submit"
@@ -486,6 +363,15 @@ export function NewOrderPage() {
           bowl={editingBowl}
           onChange={(patch) => updateBowl(editingBowl.id, patch)}
           onClose={() => setEditingId(null)}
+        />
+      )}
+
+      {createdOrder && (
+        <TicketModal
+          order={createdOrder}
+          eventName={event.name}
+          askFirst
+          onClose={finishAndLeave}
         />
       )}
     </div>

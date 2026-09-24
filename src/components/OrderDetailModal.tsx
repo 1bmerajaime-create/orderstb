@@ -1,6 +1,7 @@
-import { CheckCircle2, Mail, Trash2 } from 'lucide-react';
+import { CheckCircle2, Mail, Ticket, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 import { Modal } from './ui';
+import { parseRecipe, WHEY } from '../lib/bowl';
 import { sendReceiptEmail, FROM_EMAIL } from '../lib/receipt';
 import { useStore } from '../lib/store';
 import {
@@ -9,7 +10,7 @@ import {
   ivaFromGross,
   netFromGross,
 } from '../lib/utils';
-import type { Order } from '../types';
+import type { Order, OrderLine } from '../types';
 
 export function OrderDetailModal({
   order,
@@ -21,13 +22,165 @@ export function OrderDetailModal({
   const { data, deleteOrder, updateOrderStatus } = useStore();
   const currentOrder = data.orders.find((item) => item.id === order.id) || order;
   const event = data.events.find((item) => item.id === currentOrder.eventId);
-  const [email, setEmail] = useState(currentOrder.customerEmail || '');
+  const [showTicket, setShowTicket] = useState(false);
+
+  return (
+    <>
+      <Modal
+        title={`Pedido #${currentOrder.number}`}
+        onClose={onClose}
+        wide
+        headerActions={
+          <button
+            type="button"
+            className="icon-btn"
+            aria-label="Ticket y desglose"
+            onClick={() => setShowTicket(true)}
+          >
+            <Ticket size={18} />
+          </button>
+        }
+      >
+        <div className="order-detail">
+          <div className="order-detail-summary">
+            <strong>{currentOrder.customerName}</strong>
+            <span>{formatTime(currentOrder.createdAt)}</span>
+          </div>
+
+          <div className="order-detail-lines">
+            {currentOrder.lines.map((line, index) => (
+              <BowlLineCard
+                key={`${line.productId}-${index}`}
+                line={line}
+                fallbackIngredients={
+                  data.products.find((p) => p.id === line.productId)
+                    ?.ingredients || []
+                }
+              />
+            ))}
+          </div>
+
+          <div className="modal-actions order-detail-actions">
+            <button
+              type="button"
+              className="btn btn-ghost btn-sm"
+              onClick={() => {
+                if (
+                  confirm(
+                    `¿Eliminar el pedido #${currentOrder.number}? Esta acción no se puede deshacer.`,
+                  )
+                ) {
+                  deleteOrder(currentOrder.id);
+                  onClose();
+                }
+              }}
+            >
+              <Trash2 size={16} /> Eliminar
+            </button>
+            {currentOrder.status !== 'listo' &&
+              currentOrder.status !== 'entregado' && (
+                <button
+                  type="button"
+                  className="btn btn-primary btn-lg"
+                  onClick={() => {
+                    updateOrderStatus(currentOrder.id, 'listo');
+                    onClose();
+                  }}
+                >
+                  <CheckCircle2 size={18} /> Marcar como terminado
+                </button>
+              )}
+          </div>
+        </div>
+      </Modal>
+
+      {showTicket && (
+        <TicketModal
+          order={currentOrder}
+          eventName={event?.name}
+          onClose={() => setShowTicket(false)}
+        />
+      )}
+    </>
+  );
+}
+
+function BowlLineCard({
+  line,
+  fallbackIngredients,
+}: {
+  line: OrderLine;
+  fallbackIngredients: string[];
+}) {
+  const ingredients = line.ingredients?.length
+    ? line.ingredients
+    : fallbackIngredients;
+  const config = parseRecipe(ingredients);
+  const base = ingredients.find((item) => /a[cç]a[ií]/i.test(item)) || 'Açaí';
+
+  return (
+    <article className="order-detail-line">
+      <div className="order-detail-line-head">
+        <strong>
+          {line.quantity}× {line.productName}
+          {line.customized && (
+            <span className="customized-badge">Modificado</span>
+          )}
+        </strong>
+      </div>
+      <div className="bowl-breakdown">
+        <BreakdownRow kind="base" label="Base" values={[base]} />
+        <BreakdownRow kind="fruta" label="Fruta" values={config.fruits} />
+        <BreakdownRow kind="blando" label="Blando" values={config.softs} />
+        <BreakdownRow kind="duro" label="Duro" values={config.solids} />
+        {config.whey && (
+          <BreakdownRow kind="extra" label="Extra" values={[WHEY]} />
+        )}
+      </div>
+    </article>
+  );
+}
+
+function BreakdownRow({
+  kind,
+  label,
+  values,
+}: {
+  kind: string;
+  label: string;
+  values: string[];
+}) {
+  if (!values.length) return null;
+  return (
+    <div className={`bowl-breakdown-row bowl-breakdown-${kind}`}>
+      <span className="bowl-breakdown-label">{label}</span>
+      <span className="bowl-breakdown-values">{values.join(' · ')}</span>
+    </div>
+  );
+}
+
+export function TicketModal({
+  order,
+  eventName,
+  onClose,
+  askFirst = false,
+}: {
+  order: Order;
+  eventName?: string;
+  onClose: () => void;
+  /** Si true, pregunta antes de mostrar el desglose (post-creación). */
+  askFirst?: boolean;
+}) {
+  const [email, setEmail] = useState(order.customerEmail || '');
   const [emailNote, setEmailNote] = useState('');
   const [sending, setSending] = useState(false);
+  const [step, setStep] = useState<'ask' | 'ticket'>(
+    askFirst ? 'ask' : 'ticket',
+  );
 
-  async function handleSendReceipt() {
+  async function handleSend() {
     if (!email.trim()) {
-      setEmailNote('Indica un email.');
+      setEmailNote('Indica el email del cliente.');
       return;
     }
     setSending(true);
@@ -35,143 +188,98 @@ export function OrderDetailModal({
     try {
       const result = await sendReceiptEmail({
         to: email.trim(),
-        order: currentOrder,
-        eventName: event?.name,
+        order,
+        eventName,
       });
       setEmailNote(result.message);
     } catch (error) {
       setEmailNote(
-        error instanceof Error ? error.message : 'No se pudo enviar el recibo',
+        error instanceof Error ? error.message : 'No se pudo abrir el ticket',
       );
     } finally {
       setSending(false);
     }
   }
 
+  if (step === 'ask') {
+    return (
+      <Modal title={`Pedido #${order.number} creado`} onClose={onClose}>
+        <p className="order-detail-desc">
+          ¿Quieres enviar el ticket por correo al cliente?
+        </p>
+        <div className="modal-actions">
+          <button type="button" className="btn btn-ghost" onClick={onClose}>
+            No, gracias
+          </button>
+          <button
+            type="button"
+            className="btn btn-primary"
+            onClick={() => setStep('ticket')}
+          >
+            <Mail size={16} /> Sí, enviar ticket
+          </button>
+        </div>
+      </Modal>
+    );
+  }
+
   return (
-    <Modal title={`Pedido #${currentOrder.number}`} onClose={onClose} wide>
-      <div className="order-detail">
-        <div className="order-detail-summary">
-          <strong>{currentOrder.customerName}</strong>
-          <span>{formatTime(currentOrder.createdAt)}</span>
-        </div>
-
-        <p className="order-modal-label">Productos e ingredientes</p>
-        <div className="order-detail-lines">
-          {currentOrder.lines.map((line, index) => {
-            const product = data.products.find((p) => p.id === line.productId);
-            const ingredients = line.ingredients || product?.ingredients || [];
-            return (
-              <article
-                key={`${line.productId}-${index}`}
-                className="order-detail-line"
-              >
-                <div className="order-detail-line-head">
-                  <strong>
-                    {line.quantity}× {line.productName}
-                    {line.customized && (
-                      <span className="customized-badge">Modificado</span>
-                    )}
-                  </strong>
-                  <span>{formatEUR(line.unitPrice * line.quantity)}</span>
-                </div>
-                {(line.lineDiscount || 0) > 0 && (
-                  <p className="muted">
-                    Dto. producto −{formatEUR(line.lineDiscount || 0)}
-                  </p>
-                )}
-                <ul className="ingredient-chips">
-                  {ingredients.map((ing) => (
-                    <li key={ing}>{ing}</li>
-                  ))}
-                  {!ingredients.length && (
-                    <li className="muted">Sin ingredientes en catálogo</li>
-                  )}
-                </ul>
-              </article>
-            );
-          })}
-        </div>
-
+    <Modal title={`Ticket #${order.number}`} onClose={onClose}>
+      <div className="ticket-panel">
         <div className="totals totals-inline">
           <div className="totals-row">
             <span>Subtotal</span>
-            <span>{formatEUR(currentOrder.subtotal)}</span>
+            <span>{formatEUR(order.subtotal)}</span>
           </div>
-          <div className="totals-row">
-            <span>Descuento</span>
-            <span>−{formatEUR(currentOrder.discount)}</span>
-          </div>
+          {order.discount > 0 && (
+            <div className="totals-row">
+              <span>Descuento</span>
+              <span>−{formatEUR(order.discount)}</span>
+            </div>
+          )}
           <div className="totals-row">
             <span>Base (sin IVA)</span>
-            <span>{formatEUR(netFromGross(currentOrder.total))}</span>
+            <span>{formatEUR(netFromGross(order.total))}</span>
           </div>
           <div className="totals-row">
             <span>IVA 21%</span>
-            <span>{formatEUR(ivaFromGross(currentOrder.total))}</span>
+            <span>{formatEUR(ivaFromGross(order.total))}</span>
           </div>
           <div className="totals-row grand">
             <span>Total</span>
-            <span>{formatEUR(currentOrder.total)}</span>
+            <span>{formatEUR(order.total)}</span>
           </div>
         </div>
 
         <div className="field">
-          <label htmlFor="receipt-email">Enviar ticket por Gmail</label>
-          <div className="discount-row">
-            <input
-              id="receipt-email"
-              type="email"
-              placeholder="cliente@email.com"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-            />
-            <button
-              type="button"
-              className="btn btn-ghost"
-              disabled={sending}
-              onClick={handleSendReceipt}
-            >
-              <Mail size={16} /> {sending ? 'Abriendo…' : 'Abrir en Gmail'}
-            </button>
-          </div>
-          {emailNote && <p className="builder-status complete">{emailNote}</p>}
-          <p className="muted" style={{ marginTop: '0.35rem', fontSize: '0.8rem' }}>
-            Se abre Gmail con el ticket (productos + IVA). Envíalo desde{' '}
-            {FROM_EMAIL}.
-          </p>
+          <label htmlFor="ticket-email">Email del cliente</label>
+          <input
+            id="ticket-email"
+            type="email"
+            placeholder="cliente@email.com"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            autoFocus
+          />
         </div>
 
-        <div className="modal-actions order-detail-actions">
+        {emailNote && <p className="builder-status complete">{emailNote}</p>}
+        <p className="muted ticket-hint">
+          Se abre Gmail con el ticket. Envíalo desde {FROM_EMAIL}.
+        </p>
+
+        <div className="modal-actions">
+          <button type="button" className="btn btn-ghost" onClick={onClose}>
+            Cerrar
+          </button>
           <button
             type="button"
-            className="btn btn-ghost btn-sm"
-            onClick={() => {
-              if (
-                confirm(
-                  `¿Eliminar el pedido #${currentOrder.number}? Esta acción no se puede deshacer.`,
-                )
-              ) {
-                deleteOrder(currentOrder.id);
-                onClose();
-              }
-            }}
+            className="btn btn-primary"
+            disabled={sending}
+            onClick={handleSend}
           >
-            <Trash2 size={16} /> Eliminar pedido
+            <Mail size={16} /> {sending ? 'Abriendo…' : 'Abrir en Gmail'}
           </button>
-          {currentOrder.status !== 'listo' &&
-            currentOrder.status !== 'entregado' && (
-              <button
-                type="button"
-                className="btn btn-primary btn-lg"
-                onClick={() => {
-                  updateOrderStatus(currentOrder.id, 'listo');
-                  onClose();
-                }}
-              >
-                <CheckCircle2 size={18} /> Marcar como terminado
-              </button>
-            )}
         </div>
       </div>
     </Modal>

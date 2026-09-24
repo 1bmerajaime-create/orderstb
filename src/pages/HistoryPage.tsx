@@ -29,10 +29,7 @@ export function HistoryPage() {
         if (!dateFilter) return true;
         return o.createdAt.slice(0, 10) === dateFilter;
       })
-      .sort(
-        (a, b) =>
-          new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
-      );
+      .sort((a, b) => a.number - b.number);
   }, [data.orders, eventId, productFilter, paymentFilter, dateFilter]);
 
   if (!event) return <Navigate to="/" replace />;

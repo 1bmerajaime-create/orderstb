@@ -98,41 +98,58 @@ async function copyTicket(text: string): Promise<boolean> {
   }
 }
 
-/** Abre Gmail con el ticket listo para enviar desde la cuenta de Tropic Boost. */
+function openUrl(url: string) {
+  const opened = window.open(url, '_blank', 'noopener,noreferrer');
+  if (opened) return true;
+  // Fallback si el popup se bloquea
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.target = '_blank';
+  anchor.rel = 'noopener noreferrer';
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  return true;
+}
+
+/** Abre Gmail (o mailto) con el ticket listo. Debe llamarse en un clic directo del usuario. */
 export async function sendReceiptEmail(input: {
   to: string;
   order: Order;
   eventName?: string;
-}): Promise<{ ok: boolean; mode: 'gmail'; message: string }> {
+}): Promise<{ ok: boolean; mode: 'gmail' | 'mailto'; message: string }> {
   const subject = `Tropic Boost · Ticket pedido #${input.order.number}`;
   const body = buildReceiptText(input.order, input.eventName);
   const copied = await copyTicket(body);
 
-  // Gmail limita la longitud de la URL; si el ticket es largo, el cuerpo va en el portapapeles.
-  const maxBodyLen = 1600;
+  const maxBodyLen = 1500;
   const bodyForUrl =
     body.length <= maxBodyLen
       ? body
       : `${body.slice(0, maxBodyLen)}\n\n…\n(Ticket completo en el portapapeles: pégalo con Cmd+V)`;
 
-  const params = new URLSearchParams({
-    view: 'cm',
-    fs: '1',
-    tf: '1',
-    to: input.to,
-    su: subject,
-    body: bodyForUrl,
-  });
+  const gmailUrl =
+    'https://mail.google.com/mail/?view=cm&fs=1&tf=1' +
+    `&to=${encodeURIComponent(input.to)}` +
+    `&su=${encodeURIComponent(subject)}` +
+    `&body=${encodeURIComponent(bodyForUrl)}`;
 
-  // Fuerza la cuenta de Tropic Boost si hay varias sesiones de Google abiertas
-  const gmailUrl = `https://mail.google.com/mail/?${params.toString()}&authuser=${encodeURIComponent(FROM_EMAIL)}`;
-  window.open(gmailUrl, '_blank', 'noopener,noreferrer');
-
-  return {
-    ok: true,
-    mode: 'gmail',
-    message: copied
-      ? `Ticket listo en Gmail para ${input.to}. Usa la cuenta ${FROM_EMAIL} y pulsa Enviar. (También copiado al portapapeles.)`
-      : `Ticket listo en Gmail para ${input.to}. Usa la cuenta ${FROM_EMAIL} y pulsa Enviar.`,
-  };
+  try {
+    openUrl(gmailUrl);
+    return {
+      ok: true,
+      mode: 'gmail',
+      message: copied
+        ? `Gmail abierto para ${input.to}. Revisa la cuenta ${FROM_EMAIL} y pulsa Enviar. Ticket también en el portapapeles.`
+        : `Gmail abierto para ${input.to}. Revisa la cuenta ${FROM_EMAIL} y pulsa Enviar.`,
+    };
+  } catch {
+    const mailto = `mailto:${encodeURIComponent(input.to)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+    openUrl(mailto);
+    return {
+      ok: true,
+      mode: 'mailto',
+      message: `Se abrió el cliente de correo. Envíalo desde ${FROM_EMAIL}.`,
+    };
+  }
 }
