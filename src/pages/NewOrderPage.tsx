@@ -1,5 +1,5 @@
 import { Pencil, Plus, Trash2, X } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react';
 import { Navigate, useNavigate, useParams } from 'react-router-dom';
 import { TicketModal } from '../components/OrderDetailModal';
 import { Modal } from '../components/ui';
@@ -68,6 +68,7 @@ export function NewOrderPage() {
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState('');
   const [createdOrder, setCreatedOrder] = useState<Order | null>(null);
+  const [swipedBowlId, setSwipedBowlId] = useState<string | null>(null);
 
   const lines: OrderLine[] = useMemo(
     () =>
@@ -211,6 +212,13 @@ export function NewOrderPage() {
 
   function removeBowl(id: string) {
     setBowls((current) => current.filter((bowl) => bowl.id !== id));
+    setSwipedBowlId((current) => (current === id ? null : current));
+    if (draft?.bowl.id === id) setDraft(null);
+  }
+
+  function deleteFromModal() {
+    if (!draft || draft.mode !== 'edit') return;
+    removeBowl(draft.bowl.id);
   }
 
   async function submit() {
@@ -326,9 +334,19 @@ export function NewOrderPage() {
                     bowl.discountType,
                     bowl.discountValue,
                   );
-                  const complete = isBowlComplete(config);
                   return (
-                    <article key={bowl.id} className="cart-item">
+                    <SwipeCartItem
+                      key={bowl.id}
+                      open={swipedBowlId === bowl.id}
+                      onOpenChange={(open) =>
+                        setSwipedBowlId(open ? bowl.id : null)
+                      }
+                      onDelete={() => removeBowl(bowl.id)}
+                      onEdit={() => {
+                        setSwipedBowlId(null);
+                        startEditBowl(bowl);
+                      }}
+                    >
                       <span className="cart-item-index">{index + 1}</span>
                       <div className="cart-item-body">
                         <div className="cart-item-title">
@@ -336,14 +354,11 @@ export function NewOrderPage() {
                           <span>{formatEUR(net)}</span>
                         </div>
                         {bowl.promotionId && bowl.discountValue > 0 && (
-                            <span className="customized-badge">
-                              {data.promotions.find(
-                                (p) => p.id === bowl.promotionId,
-                              )?.name || 'Dto.'}
-                            </span>
-                          )}
-                        {!complete && (
-                          <span className="builder-status">Sin completar</span>
+                          <span className="customized-badge">
+                            {data.promotions.find(
+                              (p) => p.id === bowl.promotionId,
+                            )?.name || 'Dto.'}
+                          </span>
                         )}
                         <p>
                           {bowlIngredients(config).slice(1).join(' · ') ||
@@ -355,20 +370,15 @@ export function NewOrderPage() {
                           type="button"
                           className="icon-btn"
                           aria-label={`Modificar ${bowl.productName}`}
-                          onClick={() => startEditBowl(bowl)}
+                          onClick={() => {
+                            setSwipedBowlId(null);
+                            startEditBowl(bowl);
+                          }}
                         >
                           <Pencil size={15} />
                         </button>
-                        <button
-                          type="button"
-                          className="icon-btn danger"
-                          aria-label={`Eliminar ${bowl.productName}`}
-                          onClick={() => removeBowl(bowl.id)}
-                        >
-                          <Trash2 size={15} />
-                        </button>
                       </div>
-                    </article>
+                    </SwipeCartItem>
                   );
                 })}
               </div>
@@ -431,9 +441,11 @@ export function NewOrderPage() {
           bowl={draft.bowl}
           promotions={bowlPromotions}
           confirmLabel={draft.mode === 'new' ? 'Añadir al pedido' : 'Guardar'}
+          canDelete={draft.mode === 'edit'}
           onChange={updateDraft}
           onConfirm={confirmDraft}
           onCancel={cancelDraft}
+          onDelete={deleteFromModal}
         />
       )}
 
@@ -455,14 +467,18 @@ function BowlConfigModal({
   onChange,
   onConfirm,
   onCancel,
+  onDelete,
   confirmLabel,
+  canDelete = false,
 }: {
   bowl: DraftBowl;
   promotions: Promotion[];
   onChange: (patch: Partial<DraftBowl>) => void;
   onConfirm: () => void;
   onCancel: () => void;
+  onDelete?: () => void;
   confirmLabel: string;
+  canDelete?: boolean;
 }) {
   const config: BowlConfig = {
     solids: bowl.solids,
@@ -512,6 +528,15 @@ function BowlConfigModal({
       className="bowl-modal"
       footer={
         <div className="bowl-modal-footer">
+          {canDelete && onDelete && (
+            <button
+              type="button"
+              className="btn btn-ghost bowl-modal-delete"
+              onClick={onDelete}
+            >
+              <Trash2 size={16} /> Eliminar bowl
+            </button>
+          )}
           <button
             type="button"
             className="btn btn-primary btn-lg bowl-modal-confirm"
@@ -694,6 +719,90 @@ function ToppingSection({
             </button>
           );
         })}
+      </div>
+    </div>
+  );
+}
+
+const SWIPE_DELETE_WIDTH = 72;
+
+function SwipeCartItem({
+  children,
+  open,
+  onOpenChange,
+  onDelete,
+  onEdit,
+}: {
+  children: ReactNode;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onDelete: () => void;
+  onEdit: () => void;
+}) {
+  const startX = useRef(0);
+  const startY = useRef(0);
+  const dragging = useRef(false);
+  const [offset, setOffset] = useState(0);
+  const [draggingNow, setDraggingNow] = useState(false);
+
+  const revealed = open ? -SWIPE_DELETE_WIDTH : 0;
+  const translateX = draggingNow ? offset : revealed;
+
+  function onPointerDown(event: ReactPointerEvent<HTMLDivElement>) {
+    if (event.button !== 0 && event.pointerType === 'mouse') return;
+    startX.current = event.clientX;
+    startY.current = event.clientY;
+    dragging.current = true;
+    setDraggingNow(true);
+    setOffset(revealed);
+    event.currentTarget.setPointerCapture(event.pointerId);
+  }
+
+  function onPointerMove(event: ReactPointerEvent<HTMLDivElement>) {
+    if (!dragging.current) return;
+    const dx = event.clientX - startX.current;
+    const dy = event.clientY - startY.current;
+    if (Math.abs(dy) > Math.abs(dx) && Math.abs(dy) > 8) {
+      // scroll vertical: cancel swipe
+      dragging.current = false;
+      setDraggingNow(false);
+      setOffset(0);
+      onOpenChange(false);
+      return;
+    }
+    const next = Math.min(0, Math.max(-SWIPE_DELETE_WIDTH, revealed + dx));
+    setOffset(next);
+  }
+
+  function endPointer() {
+    if (!dragging.current && !draggingNow) return;
+    dragging.current = false;
+    setDraggingNow(false);
+    const shouldOpen = offset <= -SWIPE_DELETE_WIDTH / 2;
+    onOpenChange(shouldOpen);
+    setOffset(0);
+  }
+
+  return (
+    <div className={`cart-swipe${open ? ' open' : ''}`}>
+      <button
+        type="button"
+        className="cart-swipe-delete"
+        aria-label="Eliminar bowl"
+        onClick={onDelete}
+      >
+        <Trash2 size={18} />
+      </button>
+      <div
+        className="cart-item cart-swipe-front"
+        style={{ transform: `translateX(${translateX}px)` }}
+        onPointerDown={onPointerDown}
+        onPointerMove={onPointerMove}
+        onPointerUp={endPointer}
+        onPointerCancel={endPointer}
+        onDoubleClick={onEdit}
+      >
+        {children}
       </div>
     </div>
   );
