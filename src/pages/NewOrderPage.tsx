@@ -430,6 +430,18 @@ function BowlConfigModal({
       </div>
 
       <ToppingSection
+        variant="fruta"
+        title="Frutas"
+        hint={`Incluye ${FREE_FRUITS} gratis. Cada una extra +1 €.`}
+        options={[...FRUITS]}
+        selected={bowl.fruits}
+        maxFree={FREE_FRUITS}
+        onToggle={(option) =>
+          onChange({ fruits: toggleInList(bowl.fruits, option) })
+        }
+      />
+
+      <ToppingSection
         variant="duro"
         title="Toppings duros"
         hint={`Incluye ${FREE_SOLID} gratis. Cada uno extra +1 €.`}
@@ -444,27 +456,13 @@ function BowlConfigModal({
       <ToppingSection
         variant="blando"
         title="Toppings blandos"
-        hint={`Incluye ${FREE_SOFT} gratis. Extra +1 €. Crema de pistacho siempre +1 €.`}
+        hint={`Incluye ${FREE_SOFT} gratis. Extra +1 €. Pistacho +1 €.`}
         options={[...SOFT_TOPPINGS]}
         selected={bowl.softs}
         maxFree={FREE_SOFT}
-        optionSuffix={(option) =>
-          option === PISTACHIO ? ' · siempre +1 €' : ''
-        }
+        optionSuffix={(option) => (option === PISTACHIO ? ' · +1 €' : '')}
         onToggle={(option) =>
           onChange({ softs: toggleInList(bowl.softs, option) })
-        }
-      />
-
-      <ToppingSection
-        variant="fruta"
-        title="Frutas"
-        hint={`Incluye ${FREE_FRUITS} gratis. Cada una extra +1 €.`}
-        options={[...FRUITS]}
-        selected={bowl.fruits}
-        maxFree={FREE_FRUITS}
-        onToggle={(option) =>
-          onChange({ fruits: toggleInList(bowl.fruits, option) })
         }
       />
 
