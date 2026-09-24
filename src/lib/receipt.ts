@@ -109,15 +109,6 @@ function formatLine(line: OrderLine, index: number): string {
   ].join('\n');
 }
 
-async function copyTicket(text: string): Promise<boolean> {
-  try {
-    await navigator.clipboard.writeText(text);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
 function openUrl(url: string) {
   const opened = window.open(url, '_blank', 'noopener,noreferrer');
   if (opened) return true;
@@ -131,36 +122,42 @@ function openUrl(url: string) {
   return true;
 }
 
-/** Abre Gmail (o mailto) con el ticket listo. Debe llamarse en un clic directo del usuario. */
+/** Genera el PDF del ticket, lo descarga y abre Gmail para adjuntarlo. */
 export async function sendReceiptEmail(input: {
   to: string;
   order: Order;
   eventName?: string;
 }): Promise<{ ok: boolean; mode: 'gmail' | 'mailto'; message: string }> {
-  const subject = `Tropic Boost · Ticket pedido #${input.order.number}`;
-  const body = buildReceiptText(input.order, input.eventName);
-  const copied = await copyTicket(body);
+  const { buildReceiptPdf, downloadPdfBlob } = await import('./receiptPdf');
+  const { blob, filename } = await buildReceiptPdf(input.order, input.eventName);
+  downloadPdfBlob(blob, filename);
 
-  const maxBodyLen = 1500;
-  const bodyForUrl =
-    body.length <= maxBodyLen
-      ? body
-      : `${body.slice(0, maxBodyLen)}\n\n…\n(Ticket completo en el portapapeles: pégalo con Cmd+V)`;
+  const subject = `Tropic Boost · Ticket pedido #${input.order.number}`;
+  const body = [
+    `Hola${input.order.customerName ? ` ${input.order.customerName}` : ''},`,
+    '',
+    `Adjunto el ticket PDF de tu pedido #${input.order.number} (Total: ${formatEUR(input.order.total)}).`,
+    '',
+    '¡Gracias por pedir en Tropic Boost!',
+    FROM_EMAIL,
+    '',
+    '—',
+    `Archivo: ${filename}`,
+    '(Adjunta el PDF descargado antes de enviar)',
+  ].join('\n');
 
   const gmailUrl =
     'https://mail.google.com/mail/?view=cm&fs=1&tf=1' +
     `&to=${encodeURIComponent(input.to)}` +
     `&su=${encodeURIComponent(subject)}` +
-    `&body=${encodeURIComponent(bodyForUrl)}`;
+    `&body=${encodeURIComponent(body)}`;
 
   try {
     openUrl(gmailUrl);
     return {
       ok: true,
       mode: 'gmail',
-      message: copied
-        ? `Gmail abierto para ${input.to}. Revisa la cuenta ${FROM_EMAIL} y pulsa Enviar. Ticket también en el portapapeles.`
-        : `Gmail abierto para ${input.to}. Revisa la cuenta ${FROM_EMAIL} y pulsa Enviar.`,
+      message: `PDF descargado (${filename}). Adjúntalo en Gmail y pulsa Enviar desde ${FROM_EMAIL}.`,
     };
   } catch {
     const mailto = `mailto:${encodeURIComponent(input.to)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
@@ -168,7 +165,17 @@ export async function sendReceiptEmail(input: {
     return {
       ok: true,
       mode: 'mailto',
-      message: `Se abrió el cliente de correo. Envíalo desde ${FROM_EMAIL}.`,
+      message: `PDF descargado (${filename}). Adjúntalo al correo y envíalo desde ${FROM_EMAIL}.`,
     };
   }
+}
+
+export async function downloadReceiptPdf(input: {
+  order: Order;
+  eventName?: string;
+}): Promise<{ filename: string }> {
+  const { buildReceiptPdf, downloadPdfBlob } = await import('./receiptPdf');
+  const { blob, filename } = await buildReceiptPdf(input.order, input.eventName);
+  downloadPdfBlob(blob, filename);
+  return { filename };
 }

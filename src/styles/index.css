@@ -2418,6 +2418,10 @@ tbody tr.row-clickable:hover td {
   font-size: 0.78rem;
 }
 
+.ticket-actions {
+  flex-wrap: wrap;
+}
+
 .ticket-bowls {
   display: flex;
   flex-direction: column;

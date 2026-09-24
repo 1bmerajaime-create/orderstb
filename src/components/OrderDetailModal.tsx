@@ -1,8 +1,13 @@
-import { CheckCircle2, Mail, Ticket, Trash2 } from 'lucide-react';
+import { CheckCircle2, Download, Mail, Ticket, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 import { Modal } from './ui';
 import { parseRecipe, WHEY } from '../lib/bowl';
-import { sendReceiptEmail, FROM_EMAIL, lineTotal } from '../lib/receipt';
+import {
+  sendReceiptEmail,
+  downloadReceiptPdf,
+  FROM_EMAIL,
+  lineTotal,
+} from '../lib/receipt';
 import { useStore } from '../lib/store';
 import {
   formatEUR,
@@ -194,6 +199,7 @@ export function TicketModal({
   const [email, setEmail] = useState(order.customerEmail || '');
   const [emailNote, setEmailNote] = useState('');
   const [sending, setSending] = useState(false);
+  const [downloading, setDownloading] = useState(false);
   const [step, setStep] = useState<'ask' | 'ticket'>(
     askFirst ? 'ask' : 'ticket',
   );
@@ -214,10 +220,25 @@ export function TicketModal({
       setEmailNote(result.message);
     } catch (error) {
       setEmailNote(
-        error instanceof Error ? error.message : 'No se pudo abrir el ticket',
+        error instanceof Error ? error.message : 'No se pudo generar el PDF',
       );
     } finally {
       setSending(false);
+    }
+  }
+
+  async function handleDownloadPdf() {
+    setDownloading(true);
+    setEmailNote('');
+    try {
+      const { filename } = await downloadReceiptPdf({ order, eventName });
+      setEmailNote(`PDF descargado: ${filename}`);
+    } catch (error) {
+      setEmailNote(
+        error instanceof Error ? error.message : 'No se pudo descargar el PDF',
+      );
+    } finally {
+      setDownloading(false);
     }
   }
 
@@ -291,12 +312,21 @@ export function TicketModal({
 
         {emailNote && <p className="builder-status complete">{emailNote}</p>}
         <p className="muted ticket-hint">
-          Se abre Gmail con el ticket. Envíalo desde {FROM_EMAIL}.
+          Se descarga el ticket en PDF. En Gmail adjúntalo y envíalo desde{' '}
+          {FROM_EMAIL}.
         </p>
 
-        <div className="modal-actions">
+        <div className="modal-actions ticket-actions">
           <button type="button" className="btn btn-ghost" onClick={onClose}>
             Cerrar
+          </button>
+          <button
+            type="button"
+            className="btn btn-ghost"
+            disabled={downloading}
+            onClick={handleDownloadPdf}
+          >
+            <Download size={16} /> {downloading ? 'Generando…' : 'Descargar PDF'}
           </button>
           <button
             type="button"
@@ -304,7 +334,7 @@ export function TicketModal({
             disabled={sending}
             onClick={handleSend}
           >
-            <Mail size={16} /> {sending ? 'Abriendo…' : 'Abrir en Gmail'}
+            <Mail size={16} /> {sending ? 'Preparando…' : 'PDF + Gmail'}
           </button>
         </div>
       </div>
