@@ -97,6 +97,7 @@ function formatLine(line: OrderLine, index: number): string {
 
   const detailRows = [
     `   Base: ${base}`,
+    line.size ? `   Tamaño: ${line.size} ml` : '',
     config.fruits.length ? `   Fruta: ${config.fruits.join(', ')}` : '',
     config.solids.length ? `   Duro: ${config.solids.join(', ')}` : '',
     config.softs.length ? `   Blando: ${config.softs.join(', ')}` : '',

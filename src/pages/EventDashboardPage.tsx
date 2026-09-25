@@ -12,6 +12,7 @@ import {
 } from "recharts";
 import { Modal, Money, PageHeader, Topbar } from "../components/ui";
 import { useStore } from "../lib/store";
+import { resolveAllProducts } from "../lib/productSizes";
 import {
   buildSalesSeries,
   eventKPIs,
@@ -38,6 +39,11 @@ export function EventDashboardPage() {
   const [endDate, setEndDate] = useState("");
   const [place, setPlace] = useState("");
   const [cost, setCost] = useState("");
+
+  const resolvedProducts = useMemo(
+    () => resolveAllProducts(data.products, data.recipes, data.sizes),
+    [data.products, data.recipes, data.sizes],
+  );
 
   useEffect(() => {
     if (!event) return;
@@ -326,9 +332,10 @@ export function EventDashboardPage() {
                 onChange={(event) => setSalesProductId(event.target.value)}
               >
                 <option value="all">Todos los productos</option>
-                {data.products.map((product) => (
+                {resolvedProducts.map((product) => (
                   <option key={product.id} value={product.id}>
                     {product.name}
+                    {product.size ? ` · ${product.size} ml` : ''}
                   </option>
                 ))}
               </select>

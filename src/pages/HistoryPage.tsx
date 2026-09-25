@@ -4,6 +4,7 @@ import { Link, Navigate, useParams } from 'react-router-dom';
 import { OrderDetailModal } from '../components/OrderDetailModal';
 import { PageHeader, StatusBadge, Topbar } from '../components/ui';
 import { useStore } from '../lib/store';
+import { resolveAllProducts } from '../lib/productSizes';
 import { formatDateRange, formatEUR, formatTime } from '../lib/utils';
 import type { Order } from '../types';
 
@@ -16,6 +17,11 @@ export function HistoryPage() {
   const [productFilter, setProductFilter] = useState('');
   const [paymentFilter, setPaymentFilter] = useState('');
   const [dateFilter, setDateFilter] = useState('');
+
+  const resolvedProducts = useMemo(
+    () => resolveAllProducts(data.products, data.recipes, data.sizes),
+    [data.products, data.recipes, data.sizes],
+  );
 
   const orders = useMemo(() => {
     return data.orders
@@ -64,9 +70,10 @@ export function HistoryPage() {
                 onChange={(e) => setProductFilter(e.target.value)}
               >
                 <option value="">Todos</option>
-                {data.products.map((p) => (
+                {resolvedProducts.map((p) => (
                   <option key={p.id} value={p.id}>
                     {p.name}
+                    {p.size ? ` · ${p.size} ml` : ''}
                   </option>
                 ))}
               </select>

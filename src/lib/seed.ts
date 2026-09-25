@@ -1,6 +1,15 @@
 import type { AppData } from '../types';
+import { CANONICAL_RECIPES, CANONICAL_SIZES } from './productSizes';
 
 export const PASSWORD = 'tropic.boost';
+
+function linesForRecipe(recipeId: string) {
+  return CANONICAL_SIZES.map((size) => ({
+    id: `${recipeId}-${size.ml}`,
+    recipeId,
+    sizeId: size.id,
+  }));
+}
 
 export const seedData: AppData = {
   events: [
@@ -35,61 +44,79 @@ export const seedData: AppData = {
       materialsUsed: [],
     },
   ],
+  recipes: structuredClone(CANONICAL_RECIPES),
+  sizes: structuredClone(CANONICAL_SIZES),
   products: [
-    {
-      id: 'prod-dulcecita',
-      name: 'La Dulcecita',
-      description:
-        'Açaí con almendra crocanti, mango, arándanos y miel.',
-      ingredients: ['Açaí', 'Almendra crocanti', 'Mango', 'Arándanos', 'Miel'],
-      price: 7.5,
-      tag: 'Receta de la casa',
-    },
-    {
-      id: 'prod-tropicoqueta',
-      name: 'La Tropicoqueta',
-      description:
-        'Açaí con granola, crema de cacahuete, plátano y fresa.',
-      ingredients: ['Açaí', 'Granola', 'Crema de cacahuete', 'Plátano', 'Fresa'],
-      price: 7.9,
-      tag: 'Receta de la casa',
-    },
-    {
-      id: 'prod-lotus',
-      name: 'La Lotus',
-      description:
-        'Açaí con Lotus, caramelo, plátano y arándanos.',
-      ingredients: ['Açaí', 'Lotus', 'Caramelo', 'Plátano', 'Arándanos'],
-      price: 8.2,
-      tag: 'Receta de la casa',
-    },
-    {
-      id: 'prod-custom',
-      name: 'Crea tu Açaí',
-      description:
-        'Elige 1 topping sólido, 1 topping blando y 2 frutas.',
-      ingredients: ['Açaí'],
-      price: 7.2,
-      tag: 'Personalizable',
-    },
+    ...linesForRecipe('prod-dulcecita'),
+    ...linesForRecipe('prod-tropicoqueta'),
+    ...linesForRecipe('prod-lotus'),
+    ...linesForRecipe('prod-custom'),
   ],
   materials: [
-    { id: 'mat-acai', name: 'Açaí base', price: 4.2, unit: 'kg' },
-    { id: 'mat-platano', name: 'Plátano', price: 1.8, unit: 'kg' },
-    { id: 'mat-fresa', name: 'Fresa', price: 3.5, unit: 'kg' },
-    { id: 'mat-arandanos', name: 'Arándanos', price: 6.5, unit: 'kg' },
-    { id: 'mat-mango', name: 'Mango', price: 2.9, unit: 'kg' },
-    { id: 'mat-granola', name: 'Granola', price: 3.2, unit: 'kg' },
-    { id: 'mat-almendra', name: 'Almendra crocanti', price: 5.5, unit: 'kg' },
-    { id: 'mat-pb', name: 'Crema de cacahuete', price: 5.5, unit: 'kg' },
-    { id: 'mat-lotus', name: 'Galleta Lotus', price: 4.8, unit: 'kg' },
-    { id: 'mat-galleta', name: 'Galleta', price: 3.1, unit: 'kg' },
-    { id: 'mat-coco', name: 'Coco rallado', price: 4.0, unit: 'kg' },
-    { id: 'mat-choco', name: 'Choco chips', price: 5.2, unit: 'kg' },
-    { id: 'mat-miel', name: 'Miel', price: 6.0, unit: 'kg' },
-    { id: 'mat-caramelo', name: 'Caramelo', price: 4.5, unit: 'kg' },
-    { id: 'mat-pistacho', name: 'Crema de pistacho', price: 9.0, unit: 'kg' },
-    { id: 'mat-whey', name: 'Proteína whey', price: 22, unit: 'kg' },
+    { id: 'mat-acai', name: 'Açaí base', price: 4.2, unit: 'kg', kind: 'otro' },
+    { id: 'mat-platano', name: 'Plátano', price: 1.8, unit: 'kg', kind: 'fruta' },
+    { id: 'mat-fresa', name: 'Fresa', price: 3.5, unit: 'kg', kind: 'fruta' },
+    {
+      id: 'mat-arandanos',
+      name: 'Arándanos',
+      price: 6.5,
+      unit: 'kg',
+      kind: 'fruta',
+    },
+    { id: 'mat-mango', name: 'Mango', price: 2.9, unit: 'kg', kind: 'fruta' },
+    { id: 'mat-granola', name: 'Granola', price: 3.2, unit: 'kg', kind: 'topping_duro' },
+    {
+      id: 'mat-almendra',
+      name: 'Almendra crocanti',
+      price: 5.5,
+      unit: 'kg',
+      kind: 'topping_duro',
+    },
+    {
+      id: 'mat-pb',
+      name: 'Crema de cacahuete',
+      price: 5.5,
+      unit: 'kg',
+      kind: 'topping_blando',
+    },
+    { id: 'mat-lotus', name: 'Lotus', price: 4.8, unit: 'kg', kind: 'topping_duro' },
+    { id: 'mat-galleta', name: 'Galleta', price: 3.1, unit: 'kg', kind: 'topping_duro' },
+    {
+      id: 'mat-coco',
+      name: 'Coco rallado',
+      price: 4.0,
+      unit: 'kg',
+      kind: 'topping_duro',
+    },
+    {
+      id: 'mat-choco',
+      name: 'Choco chips',
+      price: 5.2,
+      unit: 'kg',
+      kind: 'topping_duro',
+    },
+    { id: 'mat-miel', name: 'Miel', price: 6.0, unit: 'kg', kind: 'topping_blando' },
+    {
+      id: 'mat-caramelo',
+      name: 'Caramelo',
+      price: 4.5,
+      unit: 'kg',
+      kind: 'topping_blando',
+    },
+    {
+      id: 'mat-pistacho',
+      name: 'Crema de pistacho',
+      price: 9.0,
+      unit: 'kg',
+      kind: 'topping_blando',
+    },
+    {
+      id: 'mat-whey',
+      name: 'Proteína whey',
+      price: 22,
+      unit: 'kg',
+      kind: 'otro',
+    },
   ],
   promotions: [
     {
@@ -98,6 +125,13 @@ export const seedData: AppData = {
       type: 'percent',
       value: 10,
       description: '10% sobre el total',
+    },
+    {
+      id: 'promo-1e',
+      name: '1€ descuento',
+      type: 'fixed',
+      value: 1,
+      description: '1€ fijo',
     },
     {
       id: 'promo-2e',

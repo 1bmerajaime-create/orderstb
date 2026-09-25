@@ -9,6 +9,7 @@ import {
 } from 'react';
 import type {
   AppData,
+  BowlSize,
   Event,
   Material,
   Order,
@@ -16,6 +17,7 @@ import type {
   OrderStatus,
   PaymentMethod,
   Product,
+  ProductRecipe,
   Promotion,
 } from '../types';
 import {
@@ -26,16 +28,21 @@ import {
   removeOrderAndRenumber,
   removeProduct,
   removePromotion,
+  removeRecipe,
+  removeSize,
   subscribeAppData,
   upsertEvent,
   upsertMaterial,
   upsertOrder,
   upsertProduct,
   upsertPromotion,
+  upsertRecipe,
+  upsertSize,
 } from './cloud';
 import { cloudLogin, cloudLogout, isCloudEnabled } from './firebase';
 import { isAuthenticated, loadData, saveData, setAuthenticated } from './storage';
 import { PASSWORD } from './seed';
+import { migrateCatalog } from './productSizes';
 import {
   calcDiscount,
   calcSubtotal,
@@ -43,6 +50,17 @@ import {
   round2,
   uid,
 } from './utils';
+
+function normalizeAppData(data: AppData): AppData {
+  const catalog = migrateCatalog(data);
+  return {
+    ...data,
+    recipes: catalog.recipes,
+    sizes: catalog.sizes,
+    products: catalog.products,
+    materials: catalog.materials,
+  };
+}
 
 interface StoreContextValue {
   data: AppData;
@@ -56,7 +74,15 @@ interface StoreContextValue {
   addEvent: (e: Omit<Event, 'id' | 'createdAt'>) => Promise<Event>;
   updateEvent: (id: string, patch: Partial<Event>) => Promise<void>;
   deleteEvent: (id: string) => Promise<void>;
-  // Products
+  // Recipes (productos)
+  addRecipe: (r: Omit<ProductRecipe, 'id'>) => Promise<ProductRecipe>;
+  updateRecipe: (id: string, patch: Partial<ProductRecipe>) => Promise<void>;
+  deleteRecipe: (id: string) => Promise<void>;
+  // Sizes
+  addSize: (s: Omit<BowlSize, 'id'>) => Promise<BowlSize>;
+  updateSize: (id: string, patch: Partial<BowlSize>) => Promise<void>;
+  deleteSize: (id: string) => Promise<void>;
+  // Catalog lines (products)
   addProduct: (p: Omit<Product, 'id'>) => Promise<Product>;
   updateProduct: (id: string, patch: Partial<Product>) => Promise<void>;
   deleteProduct: (id: string) => Promise<void>;
@@ -87,6 +113,8 @@ interface StoreContextValue {
 
 const emptyData: AppData = {
   events: [],
+  recipes: [],
+  sizes: [],
   products: [],
   materials: [],
   promotions: [],
@@ -99,7 +127,7 @@ const StoreContext = createContext<StoreContextValue | null>(null);
 export function StoreProvider({ children }: { children: ReactNode }) {
   const cloudEnabled = isCloudEnabled;
   const [data, setData] = useState<AppData>(() =>
-    cloudEnabled ? emptyData : loadData(),
+    cloudEnabled ? emptyData : normalizeAppData(loadData()),
   );
   const [authenticated, setAuth] = useState(() => isAuthenticated());
   const [syncReady, setSyncReady] = useState(!cloudEnabled);
@@ -127,7 +155,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         if (cancelled) return;
         unsub = subscribeAppData(
           (next) => {
-            setData(next);
+            setData(normalizeAppData(next));
             setSyncReady(true);
             setSyncError(null);
           },
@@ -227,14 +255,162 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     [cloudEnabled],
   );
 
-  const addProduct = useCallback(
-    async (p: Omit<Product, 'id'>) => {
-      const product: Product = { ...p, id: uid('prod') };
-      if (cloudEnabled) await upsertProduct(product);
-      else setData((prev) => ({ ...prev, products: [product, ...prev.products] }));
-      return product;
+  const addRecipe = useCallback(
+    async (r: Omit<ProductRecipe, 'id'>) => {
+      const recipe: ProductRecipe = { ...r, id: uid('recipe') };
+      if (cloudEnabled) await upsertRecipe(recipe);
+      else
+        setData((prev) => ({
+          ...prev,
+          recipes: [recipe, ...prev.recipes],
+        }));
+      return recipe;
     },
     [cloudEnabled],
+  );
+
+  const updateRecipe = useCallback(
+    async (id: string, patch: Partial<ProductRecipe>) => {
+      if (cloudEnabled) {
+        const current = data.recipes.find((r) => r.id === id);
+        if (!current) return;
+        await upsertRecipe({ ...current, ...patch });
+        return;
+      }
+      setData((prev) => ({
+        ...prev,
+        recipes: prev.recipes.map((r) =>
+          r.id === id ? { ...r, ...patch } : r,
+        ),
+      }));
+    },
+    [cloudEnabled, data.recipes],
+  );
+
+  const deleteRecipe = useCallback(
+    async (id: string) => {
+      if (cloudEnabled) {
+        const lines = data.products.filter((p) => p.recipeId === id);
+        for (const line of lines) {
+          await removeProduct(line.id);
+        }
+        await removeRecipe(id);
+        return;
+      }
+      setData((prev) => ({
+        ...prev,
+        recipes: prev.recipes.filter((r) => r.id !== id),
+        products: prev.products.filter((p) => p.recipeId !== id),
+      }));
+    },
+    [cloudEnabled, data.products],
+  );
+
+  const addSize = useCallback(
+    async (s: Omit<BowlSize, 'id'>) => {
+      const size: BowlSize = {
+        ...s,
+        id: `size-${s.ml}`,
+      };
+      if (cloudEnabled) await upsertSize(size);
+      else
+        setData((prev) => ({
+          ...prev,
+          sizes: [
+            ...prev.sizes.filter((item) => item.id !== size.id && item.ml !== size.ml),
+            size,
+          ].sort((a, b) => a.ml - b.ml),
+        }));
+      return size;
+    },
+    [cloudEnabled],
+  );
+
+  const updateSize = useCallback(
+    async (id: string, patch: Partial<BowlSize>) => {
+      if (cloudEnabled) {
+        const current = data.sizes.find((s) => s.id === id);
+        if (!current) return;
+        const next = { ...current, ...patch };
+        // Si cambia ml, actualizar id canónico
+        const canonical: BowlSize = {
+          ...next,
+          id: `size-${next.ml}`,
+        };
+        if (canonical.id !== id) {
+          await upsertSize(canonical);
+          await removeSize(id);
+          // Reasignar líneas al nuevo sizeId
+          const lines = data.products.filter((p) => p.sizeId === id);
+          for (const line of lines) {
+            await upsertProduct({ ...line, sizeId: canonical.id });
+          }
+          return;
+        }
+        await upsertSize(canonical);
+        return;
+      }
+      setData((prev) => {
+        const current = prev.sizes.find((s) => s.id === id);
+        if (!current) return prev;
+        const next = { ...current, ...patch };
+        const canonical: BowlSize = { ...next, id: `size-${next.ml}` };
+        return {
+          ...prev,
+          sizes: prev.sizes
+            .filter((s) => s.id !== id)
+            .concat(canonical)
+            .sort((a, b) => a.ml - b.ml),
+          products: prev.products.map((p) =>
+            p.sizeId === id ? { ...p, sizeId: canonical.id } : p,
+          ),
+        };
+      });
+    },
+    [cloudEnabled, data.sizes, data.products],
+  );
+
+  const deleteSize = useCallback(
+    async (id: string) => {
+      if (cloudEnabled) {
+        const lines = data.products.filter((p) => p.sizeId === id);
+        for (const line of lines) {
+          await removeProduct(line.id);
+        }
+        await removeSize(id);
+        return;
+      }
+      setData((prev) => ({
+        ...prev,
+        sizes: prev.sizes.filter((s) => s.id !== id),
+        products: prev.products.filter((p) => p.sizeId !== id),
+      }));
+    },
+    [cloudEnabled, data.products],
+  );
+
+  const addProduct = useCallback(
+    async (p: Omit<Product, 'id'>) => {
+      const product: Product = {
+        ...p,
+        id: `${p.recipeId}-${data.sizes.find((s) => s.id === p.sizeId)?.ml ?? uid('line')}`,
+      };
+      // Preferir id estable recipe-ml
+      const size = data.sizes.find((s) => s.id === p.sizeId);
+      const stable: Product = {
+        recipeId: p.recipeId,
+        sizeId: p.sizeId,
+        id: size ? `${p.recipeId}-${size.ml}` : product.id,
+      };
+      if (cloudEnabled) await upsertProduct(stable);
+      else
+        setData((prev) => ({
+          ...prev,
+          products: [stable, ...prev.products],
+        }));
+      return stable;
+    },
+    [cloudEnabled, data.sizes],
   );
 
   const updateProduct = useCallback(
@@ -242,17 +418,38 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       if (cloudEnabled) {
         const current = data.products.find((p) => p.id === id);
         if (!current) return;
-        await upsertProduct({ ...current, ...patch });
+        const merged = { ...current, ...patch };
+        const size = data.sizes.find((s) => s.id === merged.sizeId);
+        const next: Product = {
+          recipeId: merged.recipeId,
+          sizeId: merged.sizeId,
+          id: size
+            ? `${merged.recipeId}-${size.ml}`
+            : merged.id,
+        };
+        await upsertProduct(next);
+        if (next.id !== id) await removeProduct(id);
         return;
       }
-      setData((prev) => ({
-        ...prev,
-        products: prev.products.map((p) =>
-          p.id === id ? { ...p, ...patch } : p,
-        ),
-      }));
+      setData((prev) => {
+        const current = prev.products.find((p) => p.id === id);
+        if (!current) return prev;
+        const merged = { ...current, ...patch };
+        const size = prev.sizes.find((s) => s.id === merged.sizeId);
+        const next: Product = {
+          recipeId: merged.recipeId,
+          sizeId: merged.sizeId,
+          id: size ? `${merged.recipeId}-${size.ml}` : merged.id,
+        };
+        return {
+          ...prev,
+          products: prev.products
+            .filter((p) => p.id !== id)
+            .concat(next),
+        };
+      });
     },
-    [cloudEnabled, data.products],
+    [cloudEnabled, data.products, data.sizes],
   );
 
   const deleteProduct = useCallback(
@@ -523,6 +720,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       addEvent,
       updateEvent,
       deleteEvent,
+      addRecipe,
+      updateRecipe,
+      deleteRecipe,
+      addSize,
+      updateSize,
+      deleteSize,
       addProduct,
       updateProduct,
       deleteProduct,
@@ -548,6 +751,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       addEvent,
       updateEvent,
       deleteEvent,
+      addRecipe,
+      updateRecipe,
+      deleteRecipe,
+      addSize,
+      updateSize,
+      deleteSize,
       addProduct,
       updateProduct,
       deleteProduct,

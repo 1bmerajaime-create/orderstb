@@ -4,6 +4,7 @@ import { Link, Navigate, useParams } from 'react-router-dom';
 import { OrderDetailModal } from '../components/OrderDetailModal';
 import { PageHeader, Topbar } from '../components/ui';
 import { useStore } from '../lib/store';
+import { resolveAllProducts } from '../lib/productSizes';
 import { formatTime } from '../lib/utils';
 import type { Order } from '../types';
 
@@ -15,6 +16,11 @@ export function OrdersPage() {
   const event = data.events.find((e) => e.id === eventId);
   const [tab, setTab] = useState<BoardTab>('curso');
   const [detailOrder, setDetailOrder] = useState<Order | null>(null);
+
+  const resolvedProducts = useMemo(
+    () => resolveAllProducts(data.products, data.recipes, data.sizes),
+    [data.products, data.recipes, data.sizes],
+  );
 
   const eventOrders = useMemo(
     () =>
@@ -63,7 +69,7 @@ export function OrdersPage() {
         </div>
         <div className="order-card-products">
           {order.lines.map((line, index) => {
-            const product = data.products.find(
+            const product = resolvedProducts.find(
               (item) => item.id === line.productId,
             );
             const ingredients = line.ingredients || product?.ingredients || [];
@@ -74,6 +80,7 @@ export function OrdersPage() {
               >
                 <strong>
                   {line.quantity}× {line.productName}
+                  {line.size ? ` · ${line.size} ml` : ''}
                   {line.customized && (
                     <span className="customized-badge">Modificado</span>
                   )}

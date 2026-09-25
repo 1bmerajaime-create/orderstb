@@ -8,6 +8,8 @@ export type OrderStatus =
 
 export type DiscountType = 'percent' | 'fixed' | 'bogo' | 'second_half';
 
+export type MaterialKind = 'fruta' | 'topping_duro' | 'topping_blando' | 'otro';
+
 export interface EventMaterialUsed {
   id: string;
   materialId?: string;
@@ -32,14 +34,38 @@ export interface Event {
   materialsUsed: EventMaterialUsed[];
 }
 
+/** Receta de producto (nombre + ingredientes). Sin precio ni tamaño. */
+export interface ProductRecipe {
+  id: string;
+  name: string;
+  description?: string;
+  ingredients: string[];
+}
+
+/** Tamaño global: ml + precio (afecta a todas las líneas con ese ml). */
+export interface BowlSize {
+  id: string;
+  ml: number;
+  price: number;
+}
+
+/** Línea de catálogo vendible = receta × tamaño. */
 export interface Product {
   id: string;
+  recipeId: string;
+  sizeId: string;
+}
+
+/** Producto resuelto para UI y pedidos. */
+export interface ResolvedProduct {
+  id: string;
+  recipeId: string;
+  sizeId: string;
   name: string;
   description: string;
   ingredients: string[];
+  size: number;
   price: number;
-  kcal?: number;
-  tag?: string;
 }
 
 export interface Material {
@@ -47,6 +73,7 @@ export interface Material {
   name: string;
   price: number;
   unit?: string;
+  kind: MaterialKind;
 }
 
 export interface Promotion {
@@ -74,6 +101,8 @@ export interface OrderLine {
   ingredients?: string[];
   /** La receta preestablecida se modificó para este bowl. */
   customized?: boolean;
+  /** Tamaño del bowl en ml (350 o 500). */
+  size?: number;
 }
 
 export interface Order {
@@ -98,6 +127,8 @@ export interface Order {
 
 export interface AppData {
   events: Event[];
+  recipes: ProductRecipe[];
+  sizes: BowlSize[];
   products: Product[];
   materials: Material[];
   promotions: Promotion[];

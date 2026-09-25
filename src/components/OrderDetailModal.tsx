@@ -1,5 +1,5 @@
 import { CheckCircle2, Download, Mail, Ticket, Trash2 } from 'lucide-react';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Modal } from './ui';
 import { parseRecipe, WHEY } from '../lib/bowl';
 import {
@@ -10,6 +10,7 @@ import {
   hasAutomaticTicketSend,
 } from '../lib/receipt';
 import { useStore } from '../lib/store';
+import { resolveAllProducts } from '../lib/productSizes';
 import {
   formatEUR,
   formatTime,
@@ -30,6 +31,10 @@ export function OrderDetailModal({
   const currentOrder = data.orders.find((item) => item.id === order.id) || order;
   const event = data.events.find((item) => item.id === currentOrder.eventId);
   const [showTicket, setShowTicket] = useState(false);
+  const resolvedProducts = useMemo(
+    () => resolveAllProducts(data.products, data.recipes, data.sizes),
+    [data.products, data.recipes, data.sizes],
+  );
 
   return (
     <>
@@ -61,7 +66,7 @@ export function OrderDetailModal({
                   key={`${line.productId}-${index}`}
                   line={line}
                   fallbackIngredients={
-                    data.products.find((p) => p.id === line.productId)
+                    resolvedProducts.find((p) => p.id === line.productId)
                       ?.ingredients || []
                   }
                 />
@@ -391,11 +396,13 @@ function TicketBowlRow({ line, index }: { line: OrderLine; index: number }) {
       <div className="ticket-bowl-head">
         <strong>
           {index}. {line.quantity}× {line.productName}
+          {line.size ? ` · ${line.size} ml` : ''}
         </strong>
         <span>{formatEUR(total)}</span>
       </div>
       <ul className="ticket-bowl-details">
         <li>Base: {base}</li>
+        {line.size ? <li>Tamaño: {line.size} ml</li> : null}
         {config.fruits.length > 0 && (
           <li>Fruta: {config.fruits.join(', ')}</li>
         )}

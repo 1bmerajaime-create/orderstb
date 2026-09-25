@@ -19,6 +19,21 @@ export const FRUITS = ['Plátano', 'Mango', 'Fresa', 'Arándanos'] as const;
 export const PISTACHIO = 'Crema de pistacho';
 export const WHEY = 'Proteína whey';
 export const CUSTOM_PRODUCT_ID = 'prod-custom';
+export const CUSTOM_PRODUCT_PREFIX = 'prod-custom';
+
+export function isCustomProduct(
+  product: { id: string; name?: string } | string,
+): boolean {
+  if (typeof product === 'string') {
+    return (
+      product === CUSTOM_PRODUCT_ID || product.startsWith(`${CUSTOM_PRODUCT_PREFIX}-`)
+    );
+  }
+  return (
+    isCustomProduct(product.id) ||
+    /crea\s+tu\s+a[cç]a[ií]/i.test(product.name || '')
+  );
+}
 
 export const FREE_SOLID = 1;
 export const FREE_SOFT = 1;

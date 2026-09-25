@@ -20,11 +20,19 @@ import {
   IVA_RATE,
   toLocalISO,
 } from "../lib/utils";
+import {
+  DEFAULT_BOWL_SIZE,
+  resolveAllProducts,
+} from "../lib/productSizes";
+import { FRUITS, SOFT_TOPPINGS } from "../lib/bowl";
 import type {
+  BowlSize,
   DiscountType,
   Event,
   Material,
+  MaterialKind,
   Product,
+  ProductRecipe,
   Promotion,
 } from "../types";
 import { Link, useNavigate } from "react-router-dom";
@@ -34,6 +42,13 @@ type EventView = "lista" | "calendario";
 type EventModalState =
   | { mode: "edit"; event: Event }
   | { mode: "new"; date?: string; endDate?: string }
+  | null;
+type CatalogModal =
+  | { type: "recipes-list" }
+  | { type: "sizes-list" }
+  | { type: "recipe"; initial: ProductRecipe | null; fromList?: boolean }
+  | { type: "size"; initial: BowlSize | null; fromList?: boolean }
+  | { type: "line"; initial: Product | null }
   | null;
 
 const WEEKDAYS = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"];
@@ -46,6 +61,12 @@ export function HomePage() {
     addEvent,
     updateEvent,
     deleteEvent,
+    addRecipe,
+    updateRecipe,
+    deleteRecipe,
+    addSize,
+    updateSize,
+    deleteSize,
     addProduct,
     updateProduct,
     deleteProduct,
@@ -64,15 +85,18 @@ export function HomePage() {
     return new Date(now.getFullYear(), now.getMonth(), 1);
   });
   const [eventModal, setEventModal] = useState<EventModalState>(null);
-  const [productModal, setProductModal] = useState<Product | "new" | null>(
-    null,
-  );
+  const [catalogModal, setCatalogModal] = useState<CatalogModal>(null);
   const [materialModal, setMaterialModal] = useState<Material | "new" | null>(
     null,
   );
   const [promoModal, setPromoModal] = useState<Promotion | "new" | null>(null);
   const [showGanadoBreakdown, setShowGanadoBreakdown] = useState(false);
   const [showPedidosBreakdown, setShowPedidosBreakdown] = useState(false);
+
+  const resolvedProducts = useMemo(
+    () => resolveAllProducts(data.products, data.recipes, data.sizes),
+    [data.products, data.recipes, data.sizes],
+  );
 
   const sortedEvents = useMemo(
     () =>
@@ -201,7 +225,7 @@ export function HomePage() {
           {(
             [
               ["eventos", "Eventos"],
-              ["productos", "Productos"],
+              ["productos", "Catálogo"],
               ["materia", "Materia prima"],
               ["promos", "Promociones"],
             ] as const
@@ -328,22 +352,6 @@ export function HomePage() {
                   </button>
                   <div className="calendar-toolbar-center">
                     <strong className="calendar-month">{monthLabel}</strong>
-                    <button
-                      type="button"
-                      className="calendar-today-button"
-                      onClick={() => {
-                        const now = new Date();
-                        setCalMonth(
-                          new Date(now.getFullYear(), now.getMonth(), 1),
-                        );
-                      }}
-                    >
-                      Hoy ·{" "}
-                      {new Date().toLocaleDateString("es-ES", {
-                        day: "numeric",
-                        month: "short",
-                      })}
-                    </button>
                   </div>
                   <button
                     className="icon-btn"
@@ -362,10 +370,6 @@ export function HomePage() {
                     <ChevronRight size={18} />
                   </button>
                 </div>
-                <p className="calendar-hint">
-                  Toca un día vacío para crear un evento. Los eventos de varios
-                  días se muestran en cada fecha.
-                </p>
                 <div className="calendar-weekdays">
                   {WEEKDAYS.map((d) => (
                     <div key={d}>{d}</div>
@@ -441,63 +445,92 @@ export function HomePage() {
 
         {tab === "productos" && (
           <section className="panel">
-            <div className="panel-header">
-              <h2>Catálogo de productos</h2>
-              <button
-                className="btn btn-primary btn-sm"
-                onClick={() => setProductModal("new")}
-              >
-                <Plus size={16} /> Nuevo producto
-              </button>
+            <div className="panel-header catalog-header">
+              <h2>Catálogo</h2>
+              <div className="catalog-actions">
+                <button
+                  className="btn btn-ghost btn-sm"
+                  onClick={() => setCatalogModal({ type: "recipes-list" })}
+                >
+                  Productos
+                </button>
+                <button
+                  className="btn btn-ghost btn-sm"
+                  onClick={() => setCatalogModal({ type: "sizes-list" })}
+                >
+                  Tamaños
+                </button>
+                <button
+                  className="btn btn-primary btn-sm"
+                  onClick={() =>
+                    setCatalogModal({ type: "line", initial: null })
+                  }
+                >
+                  <Plus size={16} /> Nueva línea
+                </button>
+              </div>
             </div>
             <div className="table-wrap">
               <table>
                 <thead>
                   <tr>
                     <th>Producto</th>
+                    <th>Tamaño</th>
                     <th>Ingredientes</th>
                     <th>Precio</th>
                     <th></th>
                   </tr>
                 </thead>
                 <tbody>
-                  {data.products.map((p) => (
+                  {resolvedProducts.map((p) => (
                     <tr key={p.id}>
                       <td>
                         <strong>{p.name}</strong>
-                        <div
-                          style={{
-                            color: "var(--ink-soft)",
-                            fontSize: "0.8rem",
-                          }}
-                        >
-                          {p.tag}
-                          {p.kcal ? ` · ${p.kcal} kcal` : ""}
-                        </div>
-                        <div
-                          style={{
-                            color: "var(--ink-soft)",
-                            fontSize: "0.8rem",
-                            marginTop: 4,
-                          }}
-                        >
-                          {p.description}
-                        </div>
+                        {p.description && (
+                          <div
+                            style={{
+                              color: "var(--ink-soft)",
+                              fontSize: "0.8rem",
+                              marginTop: 4,
+                            }}
+                          >
+                            {p.description}
+                          </div>
+                        )}
                       </td>
-                      <td>{p.ingredients.join(", ")}</td>
+                      <td>{p.size ? `${p.size} ml` : "—"}</td>
+                      <td>
+                        {p.ingredients
+                          .filter((i) => !/^aça[ií]/i.test(i))
+                          .join(", ") || "—"}
+                      </td>
                       <td>{formatEUR(p.price)}</td>
                       <td>
                         <div className="event-row-actions">
                           <button
                             className="btn btn-ghost btn-sm"
-                            onClick={() => setProductModal(p)}
+                            title="Editar línea"
+                            onClick={() => {
+                              const line = data.products.find(
+                                (item) => item.id === p.id,
+                              );
+                              if (line)
+                                setCatalogModal({
+                                  type: "line",
+                                  initial: line,
+                                });
+                            }}
                           >
                             <Pencil size={14} />
                           </button>
                           <button
                             className="btn btn-danger btn-sm"
                             onClick={() => {
-                              if (confirm(`¿Eliminar “${p.name}”?`))
+                              if (
+                                confirm(
+                                  `¿Eliminar línea “${p.name} · ${p.size} ml”?`,
+                                )
+                              )
                                 deleteProduct(p.id);
                             }}
                           >
@@ -529,6 +562,7 @@ export function HomePage() {
                 <thead>
                   <tr>
                     <th>Ingrediente</th>
+                    <th>Tipo</th>
                     <th>Precio compra</th>
                     <th>Unidad</th>
                     <th></th>
@@ -540,6 +574,7 @@ export function HomePage() {
                       <td>
                         <strong>{m.name}</strong>
                       </td>
+                      <td>{materialKindLabel(m.kind)}</td>
                       <td>{formatEUR(m.price)}</td>
                       <td>{m.unit || "—"}</td>
                       <td>
@@ -754,14 +789,159 @@ export function HomePage() {
         />
       )}
 
-      {productModal && (
-        <ProductFormModal
-          initial={productModal === "new" ? null : productModal}
-          onClose={() => setProductModal(null)}
-          onSave={(payload) => {
-            if (productModal === "new") addProduct(payload);
-            else updateProduct(productModal.id, payload);
-            setProductModal(null);
+      {catalogModal?.type === "recipes-list" && (
+        <RecipesListModal
+          recipes={[...data.recipes].sort((a, b) =>
+            a.name.localeCompare(b.name, "es"),
+          )}
+          onClose={() => setCatalogModal(null)}
+          onAdd={() =>
+            setCatalogModal({
+              type: "recipe",
+              initial: null,
+              fromList: true,
+            })
+          }
+          onEdit={(recipe) =>
+            setCatalogModal({
+              type: "recipe",
+              initial: recipe,
+              fromList: true,
+            })
+          }
+          onDelete={async (recipe) => {
+            if (
+              confirm(`¿Eliminar producto “${recipe.name}” y sus líneas?`)
+            ) {
+              await deleteRecipe(recipe.id);
+            }
+          }}
+        />
+      )}
+
+      {catalogModal?.type === "sizes-list" && (
+        <SizesListModal
+          sizes={[...data.sizes].sort((a, b) => a.ml - b.ml)}
+          onClose={() => setCatalogModal(null)}
+          onAdd={() =>
+            setCatalogModal({ type: "size", initial: null, fromList: true })
+          }
+          onEdit={(size) =>
+            setCatalogModal({ type: "size", initial: size, fromList: true })
+          }
+          onDelete={async (size) => {
+            if (
+              confirm(
+                `¿Eliminar tamaño ${size.ml} ml y sus líneas?`,
+              )
+            ) {
+              await deleteSize(size.id);
+            }
+          }}
+        />
+      )}
+
+      {catalogModal?.type === "recipe" && (
+        <RecipeFormModal
+          initial={catalogModal.initial}
+          materials={data.materials}
+          onClose={() =>
+            setCatalogModal(
+              catalogModal.fromList ? { type: "recipes-list" } : null,
+            )
+          }
+          onSave={async (payload) => {
+            if (catalogModal.initial) {
+              await updateRecipe(catalogModal.initial.id, payload);
+            } else {
+              await addRecipe(payload);
+            }
+            setCatalogModal(
+              catalogModal.fromList ? { type: "recipes-list" } : null,
+            );
+          }}
+          onDelete={
+            catalogModal.initial
+              ? async () => {
+                  if (
+                    confirm(
+                      `¿Eliminar producto “${catalogModal.initial!.name}” y sus líneas?`,
+                    )
+                  ) {
+                    await deleteRecipe(catalogModal.initial!.id);
+                    setCatalogModal(
+                      catalogModal.fromList
+                        ? { type: "recipes-list" }
+                        : null,
+                    );
+                  }
+                }
+              : undefined
+          }
+        />
+      )}
+
+      {catalogModal?.type === "size" && (
+        <SizeFormModal
+          initial={catalogModal.initial}
+          onClose={() =>
+            setCatalogModal(
+              catalogModal.fromList ? { type: "sizes-list" } : null,
+            )
+          }
+          onSave={async (payload) => {
+            if (catalogModal.initial) {
+              await updateSize(catalogModal.initial.id, payload);
+            } else {
+              await addSize(payload);
+            }
+            setCatalogModal(
+              catalogModal.fromList ? { type: "sizes-list" } : null,
+            );
+          }}
+          onDelete={
+            catalogModal.initial
+              ? async () => {
+                  if (
+                    confirm(
+                      `¿Eliminar tamaño ${catalogModal.initial!.ml} ml y sus líneas?`,
+                    )
+                  ) {
+                    await deleteSize(catalogModal.initial!.id);
+                    setCatalogModal(
+                      catalogModal.fromList ? { type: "sizes-list" } : null,
+                    );
+                  }
+                }
+              : undefined
+          }
+        />
+      )}
+
+      {catalogModal?.type === "line" && (
+        <LineFormModal
+          initial={catalogModal.initial}
+          recipes={data.recipes}
+          sizes={data.sizes}
+          products={data.products}
+          onClose={() => setCatalogModal(null)}
+          onEditRecipe={(recipe) =>
+            setCatalogModal({
+              type: "recipe",
+              initial: recipe,
+              fromList: false,
+            })
+          }
+          onEditSize={(size) =>
+            setCatalogModal({ type: "size", initial: size, fromList: false })
+          }
+          onSave={async (payload) => {
+            if (catalogModal.initial) {
+              await updateProduct(catalogModal.initial.id, payload);
+            } else {
+              await addProduct(payload);
+            }
+            setCatalogModal(null);
           }}
         />
       )}
@@ -791,6 +971,21 @@ export function HomePage() {
       )}
     </div>
   );
+}
+
+function materialKindLabel(kind: MaterialKind | undefined | string) {
+  switch (kind) {
+    case "fruta":
+      return "Fruta";
+    case "topping_duro":
+      return "Topping duro";
+    case "topping_blando":
+      return "Topping blando";
+    case "topping":
+      return "Topping";
+    default:
+      return "Otro";
+  }
 }
 
 function promoTypeLabel(type: DiscountType) {
@@ -913,23 +1108,224 @@ function EventFormModal({
   );
 }
 
-function ProductFormModal({
+function RecipesListModal({
+  recipes,
+  onClose,
+  onAdd,
+  onEdit,
+  onDelete,
+}: {
+  recipes: ProductRecipe[];
+  onClose: () => void;
+  onAdd: () => void;
+  onEdit: (recipe: ProductRecipe) => void;
+  onDelete: (recipe: ProductRecipe) => void | Promise<void>;
+}) {
+  return (
+    <Modal title="Productos" onClose={onClose} wide>
+      {recipes.length === 0 ? (
+        <p className="catalog-list-empty">Aún no hay productos.</p>
+      ) : (
+        <div className="catalog-list">
+          {recipes.map((recipe) => (
+            <div key={recipe.id} className="catalog-list-row">
+              <div>
+                <strong>{recipe.name}</strong>
+                <div className="catalog-list-meta">
+                  {recipe.ingredients
+                    .filter((item) => !/^aça[ií]$/i.test(item))
+                    .join(" · ") || "Sin toppings/frutas"}
+                </div>
+              </div>
+              <div className="catalog-list-actions">
+                <button
+                  type="button"
+                  className="btn btn-ghost btn-sm"
+                  title="Editar"
+                  onClick={() => onEdit(recipe)}
+                >
+                  <Pencil size={14} />
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-danger btn-sm"
+                  title="Eliminar"
+                  onClick={() => onDelete(recipe)}
+                >
+                  <Trash2 size={14} />
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+      <div className="modal-actions">
+        <button type="button" className="btn btn-ghost" onClick={onClose}>
+          Cerrar
+        </button>
+        <button type="button" className="btn btn-primary" onClick={onAdd}>
+          <Plus size={16} /> Añadir producto
+        </button>
+      </div>
+    </Modal>
+  );
+}
+
+function SizesListModal({
+  sizes,
+  onClose,
+  onAdd,
+  onEdit,
+  onDelete,
+}: {
+  sizes: BowlSize[];
+  onClose: () => void;
+  onAdd: () => void;
+  onEdit: (size: BowlSize) => void;
+  onDelete: (size: BowlSize) => void | Promise<void>;
+}) {
+  return (
+    <Modal title="Tamaños" onClose={onClose}>
+      {sizes.length === 0 ? (
+        <p className="catalog-list-empty">Aún no hay tamaños.</p>
+      ) : (
+        <div className="catalog-list">
+          {sizes.map((size) => (
+            <div key={size.id} className="catalog-list-row">
+              <div>
+                <strong>{size.ml} ml</strong>
+                <div className="catalog-list-meta">{formatEUR(size.price)}</div>
+              </div>
+              <div className="catalog-list-actions">
+                <button
+                  type="button"
+                  className="btn btn-ghost btn-sm"
+                  title="Editar"
+                  onClick={() => onEdit(size)}
+                >
+                  <Pencil size={14} />
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-danger btn-sm"
+                  title="Eliminar"
+                  onClick={() => onDelete(size)}
+                >
+                  <Trash2 size={14} />
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+      <div className="modal-actions">
+        <button type="button" className="btn btn-ghost" onClick={onClose}>
+          Cerrar
+        </button>
+        <button type="button" className="btn btn-primary" onClick={onAdd}>
+          <Plus size={16} /> Añadir tamaño
+        </button>
+      </div>
+    </Modal>
+  );
+}
+
+function RecipeFormModal({
   initial,
+  materials,
   onClose,
   onSave,
+  onDelete,
 }: {
-  initial: Product | null;
+  initial: ProductRecipe | null;
+  materials: Material[];
   onClose: () => void;
-  onSave: (p: Omit<Product, "id">) => void;
+  onSave: (p: Omit<ProductRecipe, "id">) => void | Promise<void>;
+  onDelete?: () => void | Promise<void>;
 }) {
   const [name, setName] = useState(initial?.name || "");
   const [description, setDescription] = useState(initial?.description || "");
-  const [ingredients, setIngredients] = useState(
-    initial?.ingredients.join(", ") || "",
+  const initialPicks = (initial?.ingredients || []).filter(
+    (item) => !/^aça[ií]$/i.test(item) && !/^aça[ií] base$/i.test(item),
   );
-  const [price, setPrice] = useState(String(initial?.price ?? ""));
-  const [tag, setTag] = useState(initial?.tag || "");
-  const [kcal, setKcal] = useState(String(initial?.kcal ?? ""));
+  const [selected, setSelected] = useState<string[]>(initialPicks);
+
+  const ingredientGroups = useMemo(() => {
+    const usable = materials.filter((m) => {
+      const kind = m.kind as string;
+      return (
+        kind === "fruta" ||
+        kind === "topping_duro" ||
+        kind === "topping_blando" ||
+        kind === "topping"
+      );
+    });
+
+    const fruits = usable
+      .filter(
+        (m) =>
+          m.kind === "fruta" ||
+          (FRUITS as readonly string[]).includes(m.name),
+      )
+      .sort((a, b) => a.name.localeCompare(b.name, "es"));
+
+    const soft = usable
+      .filter(
+        (m) =>
+          (m.kind as string) === "topping_blando" ||
+          (SOFT_TOPPINGS as readonly string[]).includes(m.name),
+      )
+      .filter((m) => !fruits.some((f) => f.id === m.id))
+      .sort((a, b) => a.name.localeCompare(b.name, "es"));
+
+    const hard = usable
+      .filter(
+        (m) =>
+          !fruits.some((f) => f.id === m.id) &&
+          !soft.some((s) => s.id === m.id),
+      )
+      .sort((a, b) => a.name.localeCompare(b.name, "es"));
+
+    return {
+      fruits,
+      hard,
+      soft,
+      total: fruits.length + hard.length + soft.length,
+    };
+  }, [materials]);
+
+  function toggle(itemName: string) {
+    setSelected((current) =>
+      current.includes(itemName)
+        ? current.filter((item) => item !== itemName)
+        : [...current, itemName],
+    );
+  }
+
+  function renderPillGroup(title: string, items: Material[]) {
+    if (items.length === 0) return null;
+    return (
+      <div className="ingredient-group">
+        <strong className="ingredient-group-title">{title}</strong>
+        <div className="ingredient-pill-grid">
+          {items.map((material) => {
+            const active = selected.includes(material.name);
+            return (
+              <button
+                key={material.id}
+                type="button"
+                className={`ingredient-pill${active ? " selected" : ""}`}
+                aria-pressed={active}
+                onClick={() => toggle(material.name)}
+              >
+                {material.name}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <Modal
@@ -939,38 +1335,115 @@ function ProductFormModal({
       <form
         onSubmit={(e) => {
           e.preventDefault();
+          const ingredients = ["Açaí", ...selected];
           onSave({
             name: name.trim(),
             description: description.trim(),
-            ingredients: ingredients
-              .split(",")
-              .map((s) => s.trim())
-              .filter(Boolean),
-            price: Number(price) || 0,
-            tag: tag.trim() || undefined,
-            kcal: kcal ? Number(kcal) : undefined,
+            ingredients,
           });
         }}
       >
         <div className="field">
           <label>Nombre</label>
-          <input value={name} onChange={(e) => setName(e.target.value)} />
+          <input
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            required
+          />
         </div>
         <div className="field">
-          <label>Descripción</label>
+          <label>Descripción (opcional)</label>
           <textarea
             value={description}
             onChange={(e) => setDescription(e.target.value)}
           />
         </div>
         <div className="field">
-          <label>Ingredientes (separados por coma)</label>
-          <input
-            value={ingredients}
-            onChange={(e) => setIngredients(e.target.value)}
-          />
+          <label>Ingredientes</label>
+          <p className="muted-note" style={{ marginBottom: "0.65rem" }}>
+            Elige de la materia prima por categoría.
+          </p>
+          <div className="ingredient-groups">
+            {renderPillGroup("Fruta", ingredientGroups.fruits)}
+            {renderPillGroup("Topping duro", ingredientGroups.hard)}
+            {renderPillGroup("Topping blando", ingredientGroups.soft)}
+          </div>
+          {ingredientGroups.total === 0 && (
+            <p className="muted-note">
+              No hay materias de tipo fruta o topping. Añádelas en Materia
+              prima.
+            </p>
+          )}
         </div>
+        <div className="modal-actions">
+          {onDelete && (
+            <button
+              type="button"
+              className="btn btn-danger"
+              onClick={() => onDelete()}
+            >
+              Eliminar
+            </button>
+          )}
+          <button type="button" className="btn btn-ghost" onClick={onClose}>
+            Cancelar
+          </button>
+          <button
+            type="submit"
+            className="btn btn-primary"
+            disabled={!name.trim()}
+          >
+            Guardar
+          </button>
+        </div>
+      </form>
+    </Modal>
+  );
+}
+
+function SizeFormModal({
+  initial,
+  onClose,
+  onSave,
+  onDelete,
+}: {
+  initial: BowlSize | null;
+  onClose: () => void;
+  onSave: (p: Omit<BowlSize, "id">) => void | Promise<void>;
+  onDelete?: () => void | Promise<void>;
+}) {
+  const [ml, setMl] = useState(String(initial?.ml ?? DEFAULT_BOWL_SIZE));
+  const [price, setPrice] = useState(
+    String(initial?.price ?? (Number(initial?.ml) === 350 ? 10 : 12)),
+  );
+
+  return (
+    <Modal
+      title={initial ? "Editar tamaño" : "Nuevo tamaño"}
+      onClose={onClose}
+    >
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          const nextMl = Number(ml) || DEFAULT_BOWL_SIZE;
+          onSave({
+            ml: nextMl,
+            price: Number(price) || 0,
+          });
+        }}
+      >
         <div className="grid grid-2">
+          <div className="field">
+            <label>Tamaño (ml)</label>
+            <input
+              type="number"
+              min="1"
+              step="1"
+              value={ml}
+              onChange={(e) => setMl(e.target.value)}
+              required
+            />
+          </div>
           <div className="field">
             <label>Precio (€)</label>
             <input
@@ -979,31 +1452,167 @@ function ProductFormModal({
               step="0.01"
               value={price}
               onChange={(e) => setPrice(e.target.value)}
-            />
-          </div>
-          <div className="field">
-            <label>Kcal</label>
-            <input
-              type="number"
-              min="0"
-              value={kcal}
-              onChange={(e) => setKcal(e.target.value)}
+              required
             />
           </div>
         </div>
-        <div className="field">
-          <label>Etiqueta</label>
-          <input
-            placeholder="Recovery, Sweet boost…"
-            value={tag}
-            onChange={(e) => setTag(e.target.value)}
-          />
-        </div>
+        <p className="muted-note">
+          Este precio aplica a todas las líneas y pedidos con este tamaño.
+        </p>
         <div className="modal-actions">
+          {onDelete && (
+            <button
+              type="button"
+              className="btn btn-danger"
+              onClick={() => onDelete()}
+            >
+              Eliminar
+            </button>
+          )}
           <button type="button" className="btn btn-ghost" onClick={onClose}>
             Cancelar
           </button>
           <button type="submit" className="btn btn-primary">
+            Guardar
+          </button>
+        </div>
+      </form>
+    </Modal>
+  );
+}
+
+function LineFormModal({
+  initial,
+  recipes,
+  sizes,
+  products,
+  onClose,
+  onSave,
+  onEditRecipe,
+  onEditSize,
+}: {
+  initial: Product | null;
+  recipes: ProductRecipe[];
+  sizes: BowlSize[];
+  products: Product[];
+  onClose: () => void;
+  onSave: (p: Omit<Product, "id">) => void | Promise<void>;
+  onEditRecipe: (recipe: ProductRecipe) => void;
+  onEditSize: (size: BowlSize) => void;
+}) {
+  const [recipeId, setRecipeId] = useState(
+    initial?.recipeId || recipes[0]?.id || "",
+  );
+  const [sizeId, setSizeId] = useState(
+    initial?.sizeId || sizes[0]?.id || "",
+  );
+  const [error, setError] = useState("");
+
+  const sortedSizes = [...sizes].sort((a, b) => a.ml - b.ml);
+  const selectedRecipe = recipes.find((r) => r.id === recipeId);
+  const selectedSize = sizes.find((s) => s.id === sizeId);
+
+  return (
+    <Modal
+      title={initial ? "Editar línea" : "Nueva línea"}
+      onClose={onClose}
+    >
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (!recipeId || !sizeId) {
+            setError("Elige producto y tamaño.");
+            return;
+          }
+          const duplicate = products.find(
+            (p) =>
+              p.recipeId === recipeId &&
+              p.sizeId === sizeId &&
+              p.id !== initial?.id,
+          );
+          if (duplicate) {
+            setError("Ya existe una línea con ese producto y tamaño.");
+            return;
+          }
+          setError("");
+          onSave({ recipeId, sizeId });
+        }}
+      >
+        <div className="field">
+          <label>Producto</label>
+          <div className="catalog-select-row">
+            <select
+              className="product-size-select"
+              value={recipeId}
+              onChange={(e) => setRecipeId(e.target.value)}
+              required
+            >
+              <option value="" disabled>
+                Selecciona…
+              </option>
+              {recipes.map((recipe) => (
+                <option key={recipe.id} value={recipe.id}>
+                  {recipe.name}
+                </option>
+              ))}
+            </select>
+            {selectedRecipe && (
+              <button
+                type="button"
+                className="btn btn-ghost btn-sm"
+                title="Editar producto"
+                onClick={() => onEditRecipe(selectedRecipe)}
+              >
+                <Pencil size={14} />
+              </button>
+            )}
+          </div>
+        </div>
+        <div className="field">
+          <label>Tamaño</label>
+          <div className="catalog-select-row">
+            <select
+              className="product-size-select"
+              value={sizeId}
+              onChange={(e) => setSizeId(e.target.value)}
+              required
+            >
+              <option value="" disabled>
+                Selecciona…
+              </option>
+              {sortedSizes.map((size) => (
+                <option key={size.id} value={size.id}>
+                  {size.ml} ml · {formatEUR(size.price)}
+                </option>
+              ))}
+            </select>
+            {selectedSize && (
+              <button
+                type="button"
+                className="btn btn-ghost btn-sm"
+                title="Editar tamaño"
+                onClick={() => onEditSize(selectedSize)}
+              >
+                <Pencil size={14} />
+              </button>
+            )}
+          </div>
+        </div>
+        {error && <p className="form-error">{error}</p>}
+        {(recipes.length === 0 || sizes.length === 0) && (
+          <p className="muted-note">
+            Primero crea al menos un producto y un tamaño.
+          </p>
+        )}
+        <div className="modal-actions">
+          <button type="button" className="btn btn-ghost" onClick={onClose}>
+            Cancelar
+          </button>
+          <button
+            type="submit"
+            className="btn btn-primary"
+            disabled={!recipeId || !sizeId}
+          >
             Guardar
           </button>
         </div>
@@ -1024,6 +1633,19 @@ function MaterialFormModal({
   const [name, setName] = useState(initial?.name || "");
   const [price, setPrice] = useState(String(initial?.price ?? ""));
   const [unit, setUnit] = useState(initial?.unit || "kg");
+  const [kind, setKind] = useState<MaterialKind>(() => {
+    const raw = initial?.kind as string | undefined;
+    if (raw === "topping") return "topping_duro";
+    if (
+      raw === "fruta" ||
+      raw === "topping_duro" ||
+      raw === "topping_blando" ||
+      raw === "otro"
+    ) {
+      return raw;
+    }
+    return "otro";
+  });
 
   return (
     <Modal
@@ -1037,12 +1659,26 @@ function MaterialFormModal({
             name: name.trim(),
             price: Number(price) || 0,
             unit: unit.trim() || "kg",
+            kind,
           });
         }}
       >
         <div className="field">
           <label>Nombre</label>
           <input value={name} onChange={(e) => setName(e.target.value)} />
+        </div>
+        <div className="field">
+          <label>Tipo</label>
+          <select
+            className="product-size-select"
+            value={kind}
+            onChange={(e) => setKind(e.target.value as MaterialKind)}
+          >
+            <option value="fruta">Fruta</option>
+            <option value="topping_duro">Topping duro</option>
+            <option value="topping_blando">Topping blando</option>
+            <option value="otro">Otro</option>
+          </select>
         </div>
         <div className="grid grid-2">
           <div className="field">

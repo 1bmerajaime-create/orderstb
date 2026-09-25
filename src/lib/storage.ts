@@ -1,4 +1,5 @@
 import type { AppData, Event } from '../types';
+import { migrateCatalog, resolveLine } from './productSizes';
 import { seedData } from './seed';
 
 const STORAGE_KEY = 'tropic-boost-ops-v3';
@@ -41,20 +42,38 @@ export function normalizeData(data: AppData): AppData {
       )
       .forEach((order, index) => numberById.set(order.id, index + 1));
   }
+  const catalog = migrateCatalog({
+    ...data,
+    events,
+    recipes: data.recipes || [],
+    sizes: data.sizes || [],
+    products: data.products || [],
+    materials: data.materials || [],
+    promotions: data.promotions || [],
+    orders: validOrders,
+    orderCounter: data.orderCounter || {},
+  });
+
   const orders = validOrders.map((order) => {
     const number = numberById.get(order.id) || order.number;
     return {
       ...order,
       number,
-      lines: order.lines.map((line) => ({
-        ...line,
-        ingredients:
-          line.ingredients ||
-          LEGACY_INGREDIENTS[line.productName] ||
-          data.products.find((product) => product.id === line.productId)
-            ?.ingredients ||
-          [],
-      })),
+      lines: order.lines.map((line) => {
+        const resolved = catalog.products
+          .map((product) =>
+            resolveLine(product, catalog.recipes, catalog.sizes),
+          )
+          .find((product) => product?.id === line.productId);
+        return {
+          ...line,
+          ingredients:
+            line.ingredients ||
+            LEGACY_INGREDIENTS[line.productName] ||
+            resolved?.ingredients ||
+            [],
+        };
+      }),
       customerName:
         order.customerName === `Cliente #${order.number}`
           ? `Cliente #${number}`
@@ -74,8 +93,10 @@ export function normalizeData(data: AppData): AppData {
     events,
     orders,
     orderCounter,
-    products: data.products || [],
-    materials: data.materials || [],
+    recipes: catalog.recipes,
+    sizes: catalog.sizes,
+    products: catalog.products,
+    materials: catalog.materials,
     promotions: data.promotions || [],
   };
 }
@@ -91,6 +112,8 @@ export function loadData(): AppData {
         const migrated = normalizeData({
           ...previous,
           products: structuredClone(seedData.products),
+          recipes: structuredClone(seedData.recipes),
+          sizes: structuredClone(seedData.sizes),
           materials: structuredClone(seedData.materials),
         });
         localStorage.setItem(STORAGE_KEY, JSON.stringify(migrated));

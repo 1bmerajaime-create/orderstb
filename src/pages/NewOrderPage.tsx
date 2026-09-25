@@ -4,7 +4,6 @@ import { Navigate, useNavigate, useParams } from 'react-router-dom';
 import { TicketModal } from '../components/OrderDetailModal';
 import { Modal } from '../components/ui';
 import {
-  CUSTOM_PRODUCT_ID,
   FREE_FRUITS,
   FREE_SOFT,
   FREE_SOLID,
@@ -19,6 +18,7 @@ import {
   bowlNetPrice,
   bowlSurcharges,
   isBowlComplete,
+  isCustomProduct,
   isPaidExtra,
   lineDiscountAmount,
   parseRecipe,
@@ -33,18 +33,27 @@ import {
   uid,
 } from '../lib/utils';
 import { productImageUrl } from '../lib/productImages';
+import {
+  DEFAULT_BOWL_SIZE,
+  defaultVariant,
+  groupProductsByName,
+  productSizeMl,
+  resolveAllProducts,
+  variantForSize,
+} from '../lib/productSizes';
 import type {
   Order,
   OrderLine,
   PaymentMethod,
-  Product,
   Promotion,
+  ResolvedProduct,
 } from '../types';
 
 interface DraftBowl extends BowlConfig {
   id: string;
   productId: string;
   productName: string;
+  size: number;
   basePrice: number;
   baseRecipe: BowlConfig;
   promotionId?: string;
@@ -102,10 +111,21 @@ export function NewOrderPage() {
           promotionName: promo?.name,
           ingredients: bowlIngredients(config),
           customized:
-            bowl.productId !== CUSTOM_PRODUCT_ID && isCustomized(bowl),
+            !isCustomProduct(bowl.productId) && isCustomized(bowl),
+          size: bowl.size,
         };
       }),
     [bowls, data.promotions],
+  );
+
+  const resolvedProducts = useMemo(
+    () => resolveAllProducts(data.products, data.recipes, data.sizes),
+    [data.products, data.recipes, data.sizes],
+  );
+
+  const productGroups = useMemo(
+    () => groupProductsByName(resolvedProducts),
+    [resolvedProducts],
   );
 
   const bowlPromotions = useMemo(
@@ -131,15 +151,16 @@ export function NewOrderPage() {
 
   if (!event) return <Navigate to="/" replace />;
 
-  function makeBowl(product: Product): DraftBowl {
-    const recipe =
-      product.id === CUSTOM_PRODUCT_ID
-        ? { solids: [], softs: [], fruits: [], whey: false }
-        : parseRecipe(product.ingredients);
+  function makeBowl(product: ResolvedProduct): DraftBowl {
+    const recipe = isCustomProduct(product)
+      ? { solids: [], softs: [], fruits: [], whey: false }
+      : parseRecipe(product.ingredients);
+    const size = productSizeMl(product);
     return {
       id: uid('bowl'),
       productId: product.id,
       productName: product.name,
+      size,
       basePrice: Number(product.price) || 0,
       baseRecipe: {
         ...recipe,
@@ -157,14 +178,24 @@ export function NewOrderPage() {
     };
   }
 
-  function startNewBowl(product: Product) {
-    setDraft({ bowl: makeBowl(product), mode: 'new' });
+  function startNewBowlFromGroup(variants: ResolvedProduct[]) {
+    setDraft({ bowl: makeBowl(defaultVariant(variants)), mode: 'new' });
   }
 
   function startEditBowl(bowl: DraftBowl) {
+    const variants = resolvedProducts.filter(
+      (p) => p.name === bowl.productName,
+    );
+    const matched =
+      variantForSize(variants, bowl.size) ||
+      resolvedProducts.find((p) => p.id === bowl.productId) ||
+      defaultVariant(variants.length ? variants : resolvedProducts);
     setDraft({
       bowl: {
         ...bowl,
+        productId: matched.id,
+        size: productSizeMl(matched),
+        basePrice: Number(matched.price) || bowl.basePrice,
         solids: [...bowl.solids],
         softs: [...bowl.softs],
         fruits: [...bowl.fruits],
@@ -280,21 +311,22 @@ export function NewOrderPage() {
 
             <p className="order-modal-label">Elige tu açaí</p>
             <div className="product-picker product-picker-visual">
-              {data.products.map((product) => {
+              {productGroups.map((group) => {
+                const representative = defaultVariant(group.variants);
                 const count = bowls.filter(
-                  (bowl) => bowl.productId === product.id,
+                  (bowl) => bowl.productName === group.name,
                 ).length;
-                const unitPrice = Number(product.price) || 0;
-                const image = productImageUrl(product.id, product.name);
-                const isCustom =
-                  product.id === CUSTOM_PRODUCT_ID ||
-                  /crea\s+tu\s+a[cç]a[ií]/i.test(product.name);
+                const image = productImageUrl(
+                  representative.id,
+                  representative.name,
+                );
+                const isCustom = isCustomProduct(representative);
                 return (
                   <button
-                    key={product.id}
+                    key={group.name}
                     type="button"
                     className={`picker-card${count > 0 ? ' selected' : ''}${isCustom ? ' picker-card-custom' : ''}`}
-                    onClick={() => startNewBowl(product)}
+                    onClick={() => startNewBowlFromGroup(group.variants)}
                   >
                     <span className="picker-card-media-frame">
                       <span
@@ -304,13 +336,12 @@ export function NewOrderPage() {
                       />
                     </span>
                     <span className="picker-card-body">
-                      <span className="picker-card-name">{product.name}</span>
-                      <span className="picker-card-meta">
-                        {formatEUR(unitPrice)}
-                        {count > 0 && (
+                      <span className="picker-card-name">{group.name}</span>
+                      {count > 0 && (
+                        <span className="picker-card-meta">
                           <span className="picker-chip-count">{count}</span>
-                        )}
-                      </span>
+                        </span>
+                      )}
                     </span>
                     <Plus size={16} className="picker-card-plus" aria-hidden />
                   </button>
@@ -353,7 +384,13 @@ export function NewOrderPage() {
                       <span className="cart-item-index">{index + 1}</span>
                       <div className="cart-item-body">
                         <div className="cart-item-title">
-                          <strong>{bowl.productName}</strong>
+                          <strong>
+                            {bowl.productName}
+                            <span className="cart-item-size">
+                              {' '}
+                              · {bowl.size} ml
+                            </span>
+                          </strong>
                           <span>{formatEUR(net)}</span>
                         </div>
                         {bowl.promotionId && bowl.discountValue > 0 && (
@@ -434,6 +471,9 @@ export function NewOrderPage() {
       {draft && (
         <BowlConfigModal
           bowl={draft.bowl}
+          variants={resolvedProducts.filter(
+            (p) => p.name === draft.bowl.productName,
+          )}
           promotions={bowlPromotions}
           confirmLabel={draft.mode === 'new' ? 'Añadir al pedido' : 'Guardar'}
           canDelete={draft.mode === 'edit'}
@@ -458,6 +498,7 @@ export function NewOrderPage() {
 
 function BowlConfigModal({
   bowl,
+  variants,
   promotions,
   onChange,
   onConfirm,
@@ -467,6 +508,7 @@ function BowlConfigModal({
   canDelete = false,
 }: {
   bowl: DraftBowl;
+  variants: ResolvedProduct[];
   promotions: Promotion[];
   onChange: (patch: Partial<DraftBowl>) => void;
   onConfirm: () => void;
@@ -497,6 +539,29 @@ function BowlConfigModal({
   );
   const selectedPromo = promotions.find((p) => p.id === bowl.promotionId);
   const heroImage = productImageUrl(bowl.productId, bowl.productName);
+  const sizeVariants =
+    variants.length > 0
+      ? variants
+      : [
+          {
+            id: bowl.productId,
+            recipeId: '',
+            sizeId: '',
+            name: bowl.productName,
+            description: '',
+            ingredients: [],
+            price: bowl.basePrice,
+            size: bowl.size || DEFAULT_BOWL_SIZE,
+          } satisfies ResolvedProduct,
+        ];
+
+  function setSize(variant: ResolvedProduct) {
+    onChange({
+      productId: variant.id,
+      size: productSizeMl(variant),
+      basePrice: Number(variant.price) || 0,
+    });
+  }
 
   function applyPromotion(promotionId: string) {
     if (!promotionId) {
@@ -554,7 +619,7 @@ function BowlConfigModal({
         <div>
           <strong>{formatEUR(net)}</strong>
           <span>
-            Base {formatEUR(bowl.basePrice)}
+            Base {formatEUR(bowl.basePrice)} · {bowl.size} ml
             {surcharges.total > 0 && ` · Extras ${formatEUR(surcharges.total)}`}
             {discount > 0 && ` · Dto. −${formatEUR(discount)}`}
           </span>
@@ -563,6 +628,44 @@ function BowlConfigModal({
           {complete ? 'Completo' : 'Faltan opciones'}
         </span>
       </div>
+
+      <div className="builder-section builder-section-size">
+        <div className="builder-section-head">
+          <div>
+            <strong>Tamaño</strong>
+            <span>Elige el tamaño del bowl</span>
+          </div>
+        </div>
+        <div className="builder-options size-options">
+          {sizeVariants.map((variant) => {
+            const size = productSizeMl(variant);
+            const active = bowl.productId === variant.id || bowl.size === size;
+            return (
+              <button
+                key={variant.id}
+                type="button"
+                className={`builder-option size-option${active ? ' active' : ''}`}
+                aria-pressed={active}
+                onClick={() => setSize(variant)}
+              >
+                <span className="size-option-ml">{size} ml</span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      <ToppingSection
+        variant="duro"
+        title="Toppings duros"
+        hint={`Incluye ${FREE_SOLID} gratis. Cada uno extra +1 €.`}
+        options={[...SOLID_TOPPINGS]}
+        selected={bowl.solids}
+        maxFree={FREE_SOLID}
+        onToggle={(option) =>
+          onChange({ solids: toggleInList(bowl.solids, option) })
+        }
+      />
 
       <ToppingSection
         variant="blando"
@@ -576,18 +679,6 @@ function BowlConfigModal({
         }
         optionFee={(option, paid) =>
           option === PISTACHIO ? PISTACHIO_SURCHARGE : paid ? 1 : 0
-        }
-      />
-
-      <ToppingSection
-        variant="duro"
-        title="Toppings duros"
-        hint={`Incluye ${FREE_SOLID} gratis. Cada uno extra +1 €.`}
-        options={[...SOLID_TOPPINGS]}
-        selected={bowl.solids}
-        maxFree={FREE_SOLID}
-        onToggle={(option) =>
-          onChange({ solids: toggleInList(bowl.solids, option) })
         }
       />
 
@@ -658,7 +749,7 @@ function BowlConfigModal({
         )}
       </div>
 
-      {bowl.productId !== CUSTOM_PRODUCT_ID && (
+      {bowl.productId && !isCustomProduct(bowl.productId) && (
         <button
           type="button"
           className="btn btn-ghost btn-sm restore-recipe-btn"

@@ -409,6 +409,140 @@ button.kpi {
   color: #f5e9ff;
 }
 
+.product-size-select {
+  width: 100%;
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  padding: 0.75rem 2.75rem 0.75rem 0.95rem;
+  min-height: 46px;
+  border: 1px solid var(--line);
+  border-radius: 0.85rem;
+  background-color: rgba(14, 6, 24, 0.55);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23c4a8de' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0.9rem center;
+  background-size: 1rem;
+  color: var(--ink);
+  cursor: pointer;
+}
+
+.product-size-select:focus {
+  outline: none;
+  border-color: var(--purple-mid);
+  box-shadow: 0 0 0 3px rgba(168, 85, 224, 0.2);
+}
+
+.catalog-header {
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.catalog-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  max-height: min(60vh, 420px);
+  overflow: auto;
+  margin-bottom: 0.75rem;
+}
+
+.catalog-list-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.75rem 0.9rem;
+  border: 1px solid var(--line);
+  border-radius: 0.85rem;
+  background: rgba(14, 6, 24, 0.35);
+}
+
+.catalog-list-row strong {
+  display: block;
+}
+
+.catalog-list-meta {
+  color: var(--ink-soft);
+  font-size: 0.82rem;
+  margin-top: 0.2rem;
+}
+
+.catalog-list-actions {
+  display: flex;
+  gap: 0.35rem;
+  flex-shrink: 0;
+}
+
+.catalog-list-empty {
+  color: var(--ink-soft);
+  font-size: 0.9rem;
+  padding: 0.5rem 0 0.75rem;
+}
+
+.catalog-select-row {
+  display: flex;
+  gap: 0.4rem;
+  align-items: center;
+}
+
+.catalog-select-row .product-size-select {
+  flex: 1;
+}
+
+.ingredient-pill-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+
+.ingredient-pill {
+  appearance: none;
+  border: 1px solid var(--line);
+  background: rgba(14, 6, 24, 0.45);
+  color: var(--ink);
+  border-radius: 999px;
+  padding: 0.4rem 0.85rem;
+  font-size: 0.88rem;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.ingredient-pill:hover {
+  border-color: var(--purple-mid);
+}
+
+.ingredient-pill.selected {
+  background: rgba(168, 85, 224, 0.28);
+  border-color: var(--purple-mid);
+  color: #fff;
+}
+
+.ingredient-groups {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+}
+
+.ingredient-group-title {
+  display: block;
+  font-size: 0.82rem;
+  letter-spacing: 0.02em;
+  color: var(--ink-soft);
+  margin-bottom: 0.45rem;
+}
+
+.form-error {
+  color: #f87171;
+  font-size: 0.88rem;
+  margin: 0.35rem 0 0;
+}
+
+.product-size-select option {
+  background: #1a0b2e;
+  color: #f5e9ff;
+}
+
 .top-products-list {
   display: flex;
   flex-direction: column;
@@ -2235,11 +2369,47 @@ tbody tr.row-clickable:hover td {
   background: rgba(14, 6, 24, 0.35);
 }
 
+.builder-section-size .size-options {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.55rem;
+}
+
+.size-option {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.2rem;
+  width: 100%;
+  border-radius: var(--radius-sm);
+  padding: 0.75rem 0.85rem;
+}
+
+.size-option-ml {
+  font-family: var(--display);
+  font-size: 1.05rem;
+  font-weight: 800;
+  color: var(--ink);
+}
+
+.size-option-price {
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--lavender-bright);
+}
+
+.cart-item-size {
+  font-weight: 600;
+  color: var(--ink-soft);
+  font-size: 0.82rem;
+}
+
 .builder-section-duro,
 .builder-section-blando,
 .builder-section-fruta,
 .builder-section-extra,
-.builder-section-discount {
+.builder-section-discount,
+.builder-section-size {
   border-color: rgba(168, 85, 224, 0.28);
   background: rgba(122, 53, 192, 0.1);
 }
