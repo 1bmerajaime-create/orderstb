@@ -100,20 +100,12 @@ export function OrdersPage() {
     <div className="app-shell">
       <Topbar
         right={
-          <>
-            <Link
-              className="btn btn-primary btn-sm"
-              to={`/evento/${event.id}/nuevo-pedido`}
-            >
-              <Plus size={16} /> Crear pedido
-            </Link>
-            <Link
-              className="btn btn-ghost btn-sm"
-              to={`/evento/${event.id}/historico`}
-            >
-              <History size={16} /> Histórico
-            </Link>
-          </>
+          <Link
+            className="btn btn-ghost btn-sm"
+            to={`/evento/${event.id}/historico`}
+          >
+            <History size={16} /> Histórico
+          </Link>
         }
       />
 
@@ -123,6 +115,14 @@ export function OrdersPage() {
           backLabel="Atrás"
           title="Pedidos"
           description="Consulta cada producto y sus ingredientes. La acción principal termina el pedido y lo mueve a Listos."
+          actions={
+            <Link
+              className="btn btn-primary"
+              to={`/evento/${event.id}/nuevo-pedido`}
+            >
+              <Plus size={16} /> Crear pedido
+            </Link>
+          }
         />
 
         <div className="tabs-row">

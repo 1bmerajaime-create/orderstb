@@ -56,21 +56,6 @@ export function OrderDetailModal({
 
           <div className="order-detail-lines">
             <div className="bowl-table">
-              <div className="bowl-table-head">
-                <span className="bowl-table-product">Bowl</span>
-                <span className="bowl-breakdown-label bowl-breakdown-base">
-                  Base
-                </span>
-                <span className="bowl-breakdown-label bowl-breakdown-fruta">
-                  Fruta
-                </span>
-                <span className="bowl-breakdown-label bowl-breakdown-duro">
-                  Duro
-                </span>
-                <span className="bowl-breakdown-label bowl-breakdown-blando">
-                  Blando
-                </span>
-              </div>
               {currentOrder.lines.map((line, index) => (
                 <BowlLineRow
                   key={`${line.productId}-${index}`}
@@ -152,36 +137,43 @@ function BowlLineRow({
         {line.customized && (
           <span className="customized-badge">Modificado</span>
         )}
+      </div>
+      <div className="bowl-table-sections">
+        <ChipCell kind="base" label="Base" values={[base]} />
+        <ChipCell kind="fruta" label="Fruta" values={config.fruits} />
+        <ChipCell kind="duro" label="Duro" values={config.solids} />
+        <ChipCell kind="blando" label="Blando" values={config.softs} />
         {extras.length > 0 && (
-          <div className="bowl-breakdown-chips bowl-breakdown-extra">
-            {extras.map((value) => (
-              <span key={value} className="bowl-chip">
-                {value}
-              </span>
-            ))}
-          </div>
+          <ChipCell kind="extra" label="Extra" values={extras} />
         )}
       </div>
-      <ChipCell kind="base" values={[base]} />
-      <ChipCell kind="fruta" values={config.fruits} />
-      <ChipCell kind="duro" values={config.solids} />
-      <ChipCell kind="blando" values={config.softs} />
     </div>
   );
 }
 
-function ChipCell({ kind, values }: { kind: string; values: string[] }) {
+function ChipCell({
+  kind,
+  label,
+  values,
+}: {
+  kind: string;
+  label: string;
+  values: string[];
+}) {
   return (
-    <div className={`bowl-breakdown-chips bowl-breakdown-${kind}`}>
-      {values.length > 0 ? (
-        values.map((value) => (
-          <span key={value} className="bowl-chip">
-            {value}
-          </span>
-        ))
-      ) : (
-        <span className="bowl-chip muted">—</span>
-      )}
+    <div className={`bowl-breakdown-col bowl-breakdown-${kind}`}>
+      <span className="bowl-breakdown-label">{label}</span>
+      <div className="bowl-breakdown-chips">
+        {values.length > 0 ? (
+          values.map((value) => (
+            <span key={value} className="bowl-chip">
+              {value}
+            </span>
+          ))
+        ) : (
+          <span className="bowl-chip muted">—</span>
+        )}
+      </div>
     </div>
   );
 }
@@ -202,9 +194,10 @@ export function TicketModal({
   const [emailNote, setEmailNote] = useState('');
   const [sending, setSending] = useState(false);
   const [downloading, setDownloading] = useState(false);
-  const [step, setStep] = useState<'ask' | 'ticket'>(
+  const [step, setStep] = useState<'ask' | 'ticket' | 'sent'>(
     askFirst ? 'ask' : 'ticket',
   );
+  const [sentTo, setSentTo] = useState('');
 
   async function handleSend() {
     if (!email.trim()) {
@@ -219,7 +212,12 @@ export function TicketModal({
         order,
         eventName,
       });
-      setEmailNote(result.message);
+      if (result.ok) {
+        setSentTo(email.trim());
+        setStep('sent');
+      } else {
+        setEmailNote(result.message);
+      }
     } catch (error) {
       setEmailNote(
         error instanceof Error ? error.message : 'No se pudo generar el PDF',
@@ -246,21 +244,50 @@ export function TicketModal({
 
   if (step === 'ask') {
     return (
-      <Modal title={`Pedido #${order.number} creado`} onClose={onClose} fullscreen>
-        <p className="order-detail-desc">
+      <Modal
+        title={`Pedido #${order.number} creado`}
+        onClose={onClose}
+        fullscreen
+        className="ticket-ask-modal"
+        footer={
+          <div className="ticket-ask-actions">
+            <button type="button" className="btn btn-ghost" onClick={onClose}>
+              No, gracias
+            </button>
+            <button
+              type="button"
+              className="btn btn-primary"
+              onClick={() => setStep('ticket')}
+            >
+              <Mail size={16} /> Sí, enviar ticket
+            </button>
+          </div>
+        }
+      >
+        <p className="order-detail-desc ticket-ask-copy">
           ¿Quieres enviar el ticket por correo al cliente?
         </p>
-        <div className="modal-actions">
-          <button type="button" className="btn btn-ghost" onClick={onClose}>
-            No, gracias
-          </button>
-          <button
-            type="button"
-            className="btn btn-primary"
-            onClick={() => setStep('ticket')}
-          >
-            <Mail size={16} /> Sí, enviar ticket
-          </button>
+      </Modal>
+    );
+  }
+
+  if (step === 'sent') {
+    return (
+      <Modal title="Ticket enviado" onClose={onClose} fullscreen>
+        <div className="ticket-sent">
+          <div className="ticket-sent-icon" aria-hidden>
+            <CheckCircle2 size={40} />
+          </div>
+          <p className="ticket-sent-title">PDF enviado correctamente</p>
+          <p className="order-detail-desc">
+            El ticket del pedido #{order.number} se ha enviado a{' '}
+            <strong>{sentTo}</strong>.
+          </p>
+          <div className="modal-actions">
+            <button type="button" className="btn btn-primary btn-lg" onClick={onClose}>
+              Cerrar
+            </button>
+          </div>
         </div>
       </Modal>
     );

@@ -282,7 +282,7 @@ export function EventDashboardPage() {
               <Money value={kpis.revenue} />
             </div>
             <div className="kpi-hint">
-              Ticket medio {formatEUR(kpis.avgTicket)}
+              Total sin IVA {formatEUR(kpis.base)}
             </div>
           </div>
           <button

@@ -158,10 +158,14 @@ export function PageHeader({
         </div>
       )}
       <div className="page-header-main">
-        {title && <h1>{title}</h1>}
+        {(title || actions) && (
+          <div className="page-header-title-row">
+            {title && <h1>{title}</h1>}
+            {actions && <div className="event-header-actions">{actions}</div>}
+          </div>
+        )}
         {description && <p>{description}</p>}
       </div>
-      {actions && <div className="event-header-actions">{actions}</div>}
     </div>
   );
 }

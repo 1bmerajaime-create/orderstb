@@ -1,5 +1,5 @@
 import { Plus, Trash2, X } from 'lucide-react';
-import { useMemo, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react';
+import { useMemo, useState, type ReactNode } from 'react';
 import { Navigate, useNavigate, useParams } from 'react-router-dom';
 import { TicketModal } from '../components/OrderDetailModal';
 import { Modal } from '../components/ui';
@@ -67,7 +67,6 @@ export function NewOrderPage() {
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState('');
   const [createdOrder, setCreatedOrder] = useState<Order | null>(null);
-  const [swipedBowlId, setSwipedBowlId] = useState<string | null>(null);
 
   const lines: OrderLine[] = useMemo(
     () =>
@@ -211,7 +210,6 @@ export function NewOrderPage() {
 
   function removeBowl(id: string) {
     setBowls((current) => current.filter((bowl) => bowl.id !== id));
-    setSwipedBowlId((current) => (current === id ? null : current));
     if (draft?.bowl.id === id) setDraft(null);
   }
 
@@ -287,18 +285,23 @@ export function NewOrderPage() {
                 ).length;
                 const unitPrice = Number(product.price) || 0;
                 const image = productImageUrl(product.id, product.name);
+                const isCustom =
+                  product.id === CUSTOM_PRODUCT_ID ||
+                  /crea\s+tu\s+a[cç]a[ií]/i.test(product.name);
                 return (
                   <button
                     key={product.id}
                     type="button"
-                    className={`picker-card${count > 0 ? ' selected' : ''}`}
+                    className={`picker-card${count > 0 ? ' selected' : ''}${isCustom ? ' picker-card-custom' : ''}`}
                     onClick={() => startNewBowl(product)}
                   >
-                    <span
-                      className="picker-card-media"
-                      style={{ backgroundImage: `url(${image})` }}
-                      aria-hidden
-                    />
+                    <span className="picker-card-media-frame">
+                      <span
+                        className={`picker-card-media${isCustom ? ' picker-card-media-blur' : ''}`}
+                        style={{ backgroundImage: `url(${image})` }}
+                        aria-hidden
+                      />
+                    </span>
                     <span className="picker-card-body">
                       <span className="picker-card-name">{product.name}</span>
                       <span className="picker-card-meta">
@@ -342,17 +345,9 @@ export function NewOrderPage() {
                     bowl.discountValue,
                   );
                   return (
-                    <SwipeCartItem
+                    <CartItem
                       key={bowl.id}
-                      open={swipedBowlId === bowl.id}
-                      onOpenChange={(open) =>
-                        setSwipedBowlId(open ? bowl.id : null)
-                      }
-                      onDelete={() => removeBowl(bowl.id)}
-                      onEdit={() => {
-                        setSwipedBowlId(null);
-                        startEditBowl(bowl);
-                      }}
+                      onEdit={() => startEditBowl(bowl)}
                     >
                       <span className="cart-item-index">{index + 1}</span>
                       <div className="cart-item-body">
@@ -377,17 +372,15 @@ export function NewOrderPage() {
                           type="button"
                           className="icon-btn"
                           aria-label={`Eliminar ${bowl.productName}`}
-                          onPointerDown={(e) => e.stopPropagation()}
                           onClick={(e) => {
                             e.stopPropagation();
-                            setSwipedBowlId(null);
                             removeBowl(bowl.id);
                           }}
                         >
                           <Trash2 size={15} />
                         </button>
                       </div>
-                    </SwipeCartItem>
+                    </CartItem>
                   );
                 })}
               </div>
@@ -571,14 +564,15 @@ function BowlConfigModal({
       </div>
 
       <ToppingSection
-        variant="fruta"
-        title="Frutas"
-        hint={`Incluye ${FREE_FRUITS} gratis. Cada una extra +1 €.`}
-        options={[...FRUITS]}
-        selected={bowl.fruits}
-        maxFree={FREE_FRUITS}
+        variant="blando"
+        title="Toppings blandos"
+        hint={`Incluye ${FREE_SOFT} gratis. Extra +1 €. Pistacho +1 €.`}
+        options={[...SOFT_TOPPINGS]}
+        selected={bowl.softs}
+        maxFree={FREE_SOFT}
+        optionSuffix={(option) => (option === PISTACHIO ? ' · +1 €' : '')}
         onToggle={(option) =>
-          onChange({ fruits: toggleInList(bowl.fruits, option) })
+          onChange({ softs: toggleInList(bowl.softs, option) })
         }
       />
 
@@ -595,15 +589,14 @@ function BowlConfigModal({
       />
 
       <ToppingSection
-        variant="blando"
-        title="Toppings blandos"
-        hint={`Incluye ${FREE_SOFT} gratis. Extra +1 €. Pistacho +1 €.`}
-        options={[...SOFT_TOPPINGS]}
-        selected={bowl.softs}
-        maxFree={FREE_SOFT}
-        optionSuffix={(option) => (option === PISTACHIO ? ' · +1 €' : '')}
+        variant="fruta"
+        title="Frutas"
+        hint={`Incluye ${FREE_FRUITS} gratis. Cada una extra +1 €.`}
+        options={[...FRUITS]}
+        selected={bowl.fruits}
+        maxFree={FREE_FRUITS}
         onToggle={(option) =>
-          onChange({ softs: toggleInList(bowl.softs, option) })
+          onChange({ fruits: toggleInList(bowl.fruits, option) })
         }
       />
 
@@ -612,14 +605,19 @@ function BowlConfigModal({
           <strong>Extras</strong>
           <span>Opcional</span>
         </div>
-        <label className="check-row">
-          <input
-            type="checkbox"
-            checked={bowl.whey}
-            onChange={(event) => onChange({ whey: event.target.checked })}
-          />
-          Proteína whey <strong>+{formatEUR(WHEY_PRICE)}</strong>
-        </label>
+        <div className="builder-options">
+          <button
+            type="button"
+            className={`builder-option builder-option-extra${bowl.whey ? ' active' : ''}`}
+            aria-pressed={bowl.whey}
+            onClick={() => onChange({ whey: !bowl.whey })}
+          >
+            <span className="builder-option-extra-text">
+              <span>Proteína whey</span>
+              <span className="builder-option-price">+{formatEUR(WHEY_PRICE)}</span>
+            </span>
+          </button>
+        </div>
       </div>
 
       <div className="builder-section builder-section-discount">
@@ -732,111 +730,31 @@ function ToppingSection({
   );
 }
 
-const SWIPE_DELETE_WIDTH = 72;
-
-function SwipeCartItem({
+function CartItem({
   children,
-  open,
-  onOpenChange,
-  onDelete,
   onEdit,
 }: {
   children: ReactNode;
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  onDelete: () => void;
   onEdit: () => void;
 }) {
-  const startX = useRef(0);
-  const startY = useRef(0);
-  const dragging = useRef(false);
-  const moved = useRef(false);
-  const [offset, setOffset] = useState(0);
-  const [draggingNow, setDraggingNow] = useState(false);
-
-  const revealed = open ? -SWIPE_DELETE_WIDTH : 0;
-  const translateX = draggingNow ? offset : revealed;
-
-  function onPointerDown(event: ReactPointerEvent<HTMLDivElement>) {
-    if (event.button !== 0 && event.pointerType === 'mouse') return;
-    // Ignore presses on action buttons (delete)
-    if ((event.target as HTMLElement).closest('button')) return;
-    startX.current = event.clientX;
-    startY.current = event.clientY;
-    dragging.current = true;
-    moved.current = false;
-    setDraggingNow(true);
-    setOffset(revealed);
-    event.currentTarget.setPointerCapture(event.pointerId);
-  }
-
-  function onPointerMove(event: ReactPointerEvent<HTMLDivElement>) {
-    if (!dragging.current) return;
-    const dx = event.clientX - startX.current;
-    const dy = event.clientY - startY.current;
-    if (Math.abs(dx) > 6 || Math.abs(dy) > 6) moved.current = true;
-    if (Math.abs(dy) > Math.abs(dx) && Math.abs(dy) > 8) {
-      // scroll vertical: cancel swipe
-      dragging.current = false;
-      setDraggingNow(false);
-      setOffset(0);
-      onOpenChange(false);
-      return;
-    }
-    const next = Math.min(0, Math.max(-SWIPE_DELETE_WIDTH, revealed + dx));
-    setOffset(next);
-  }
-
-  function endPointer() {
-    if (!dragging.current && !draggingNow) return;
-    dragging.current = false;
-    setDraggingNow(false);
-    const shouldOpen = offset <= -SWIPE_DELETE_WIDTH / 2;
-    const wasTap = !moved.current && Math.abs(offset - revealed) < 8;
-
-    if (wasTap) {
-      if (open) {
-        onOpenChange(false);
-      } else {
-        onEdit();
-      }
-      setOffset(0);
-      return;
-    }
-
-    onOpenChange(shouldOpen);
-    setOffset(0);
-  }
-
   return (
-    <div className={`cart-swipe${open ? ' open' : ''}`}>
-      <button
-        type="button"
-        className="cart-swipe-delete"
-        aria-label="Eliminar bowl"
-        onClick={onDelete}
-      >
-        <Trash2 size={18} />
-      </button>
-      <div
-        className="cart-item cart-swipe-front cart-item-clickable"
-        style={{ transform: `translateX(${translateX}px)` }}
-        onPointerDown={onPointerDown}
-        onPointerMove={onPointerMove}
-        onPointerUp={endPointer}
-        onPointerCancel={endPointer}
-        role="button"
-        tabIndex={0}
-        aria-label="Editar bowl"
-        onKeyDown={(e) => {
-          if (e.key === 'Enter' || e.key === ' ') {
-            e.preventDefault();
-            onEdit();
-          }
-        }}
-      >
-        {children}
-      </div>
+    <div
+      className="cart-item cart-item-clickable"
+      role="button"
+      tabIndex={0}
+      aria-label="Editar bowl"
+      onClick={(e) => {
+        if ((e.target as HTMLElement).closest('button')) return;
+        onEdit();
+      }}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          onEdit();
+        }
+      }}
+    >
+      {children}
     </div>
   );
 }

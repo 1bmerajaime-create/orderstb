@@ -160,7 +160,6 @@ export function HomePage() {
           >
             <div className="kpi-label">Pedidos totales</div>
             <div className="kpi-value">{homeKpis.totalOrders}</div>
-            <div className="kpi-hint">Toca para ver desglose</div>
           </button>
           <button
             type="button"
@@ -171,7 +170,6 @@ export function HomePage() {
             <div className="kpi-value">
               <Money value={homeKpis.totalGanado} />
             </div>
-            <div className="kpi-hint">Toca para ver desglose</div>
           </button>
           {homeKpis.nextEvent ? (
             <Link
