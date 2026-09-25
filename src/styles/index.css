@@ -1644,6 +1644,8 @@ tbody tr.row-clickable:hover td {
   display: flex;
   flex-direction: column;
   gap: 0.7rem;
+  max-height: calc(100dvh - 1.5rem);
+  overflow: auto;
 }
 
 .cart-head {
@@ -1990,11 +1992,6 @@ tbody tr.row-clickable:hover td {
   flex-shrink: 0;
 }
 
-.bowl-modal-confirm {
-  flex: 1;
-  justify-content: center;
-}
-
 .cart-item-index {
   display: grid;
   place-items: center;
@@ -2050,6 +2047,12 @@ tbody tr.row-clickable:hover td {
   margin-top: auto;
   padding-top: 0.9rem;
   border-top: 1px solid var(--line);
+  position: sticky;
+  bottom: 0;
+  z-index: 5;
+  background: rgba(14, 6, 24, 0.94);
+  backdrop-filter: blur(12px);
+  padding-bottom: 0.15rem;
 }
 
 .cart-footer .totals-row.grand {
@@ -2071,8 +2074,28 @@ tbody tr.row-clickable:hover td {
 }
 
 .cart-submit {
+  display: inline-flex;
   width: 100%;
-  margin-top: 0.9rem;
+  margin-top: 0.25rem;
+  justify-content: center;
+  gap: 0.55rem;
+  padding-inline: 1.1rem;
+}
+
+.cart-submit:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+.cart-submit-label {
+  text-align: center;
+}
+
+.cart-submit-price {
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 
 .sync-banner {
@@ -2094,10 +2117,31 @@ tbody tr.row-clickable:hover td {
 
   .order-page-cart {
     position: static;
+    max-height: none;
+    overflow: visible;
+    padding-bottom: calc(5.25rem + env(safe-area-inset-bottom, 0px));
   }
 
   .cart-list {
     max-height: none;
+  }
+
+  .cart-footer {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 40;
+    margin-top: 0;
+    padding: 0.75rem 0.75rem calc(0.75rem + env(safe-area-inset-bottom, 0px));
+    border-top: 1px solid var(--line);
+    border-radius: 0;
+    background: rgba(14, 6, 24, 0.94);
+    backdrop-filter: blur(14px);
+  }
+
+  .cart-footer .cart-submit {
+    margin-top: 0;
   }
 }
 
@@ -2193,7 +2237,25 @@ tbody tr.row-clickable:hover td {
 .bowl-modal-confirm {
   flex: 1;
   justify-content: center;
+  gap: 0.55rem;
   width: auto;
+  padding-inline: 1.1rem;
+}
+
+.bowl-modal-confirm:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+.bowl-modal-confirm-label {
+  text-align: center;
+}
+
+.bowl-modal-confirm-price {
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 
 .link-secondary {
@@ -2226,6 +2288,10 @@ tbody tr.row-clickable:hover td {
 
 .custom-builder-heading {
   justify-content: space-between;
+}
+
+.custom-builder-heading:not(:has(.custom-extra-label)) {
+  justify-content: flex-end;
 }
 
 .custom-builder-heading > div {
@@ -2357,6 +2423,24 @@ tbody tr.row-clickable:hover td {
 .builder-option-extra.active .builder-option-price {
   background: rgba(251, 191, 36, 0.2);
   color: #fcd34d;
+}
+
+.builder-extra-discount-row {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0.75rem;
+}
+
+@media (min-width: 560px) {
+  .builder-extra-discount-row {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    align-items: stretch;
+  }
+
+  .builder-extra-discount-row .builder-section {
+    min-width: 0;
+    height: 100%;
+  }
 }
 
 .builder-section {
@@ -2849,17 +2933,67 @@ tbody tr.row-clickable:hover td {
   gap: 0.85rem;
 }
 
+.ticket-email-field {
+  margin: 0;
+}
+
+.ticket-email-field .ticket-hint {
+  margin-top: 0.45rem;
+}
+
+.ticket-hint {
+  margin: 0;
+  font-size: 0.78rem;
+}
+
+.ticket-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+  width: 100%;
+  align-items: center;
+}
+
+.ticket-actions .btn {
+  flex: 1 1 0;
+  justify-content: center;
+  min-width: 0;
+}
+
+.ticket-actions .btn-primary {
+  flex: 1.15 1 0;
+}
+
+.ticket-send-modal .modal-footer {
+  background: rgba(14, 6, 24, 0.92);
+  backdrop-filter: blur(12px);
+}
+
+.ticket-ask-modal {
+  max-width: 420px;
+  width: min(100%, 420px);
+  margin: auto;
+}
+
+.modal-backdrop:has(.ticket-ask-modal) {
+  align-items: center;
+  justify-content: center;
+}
+
 .ticket-ask-modal .modal-body {
   display: flex;
   align-items: center;
   justify-content: center;
   text-align: center;
+  padding: 1.35rem 1.25rem 0.5rem;
+  min-height: auto;
 }
 
 .ticket-ask-copy {
   margin: 0;
   max-width: 22rem;
   font-size: 1.05rem;
+  line-height: 1.45;
 }
 
 .ticket-ask-actions {
@@ -2914,15 +3048,6 @@ tbody tr.row-clickable:hover td {
 
 .ticket-sent .modal-actions .btn {
   min-width: min(100%, 220px);
-}
-
-.ticket-hint {
-  margin: 0;
-  font-size: 0.78rem;
-}
-
-.ticket-actions {
-  flex-wrap: wrap;
 }
 
 .ticket-bowls {

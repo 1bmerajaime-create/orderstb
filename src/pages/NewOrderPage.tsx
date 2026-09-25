@@ -16,7 +16,6 @@ import {
   bowlGrossPrice,
   bowlIngredients,
   bowlNetPrice,
-  bowlSurcharges,
   isBowlComplete,
   isCustomProduct,
   isPaidExtra,
@@ -446,12 +445,6 @@ export function NewOrderPage() {
             </div>
 
             <div className="cart-footer">
-              <div className="totals totals-inline">
-                <div className="totals-row grand">
-                  <span>Total</span>
-                  <span>{formatEUR(total)}</span>
-                </div>
-              </div>
               {submitError && (
                 <p className="builder-status">{submitError}</p>
               )}
@@ -461,7 +454,16 @@ export function NewOrderPage() {
                 disabled={lines.length === 0 || !allComplete || submitting}
                 onClick={submit}
               >
-                {submitting ? 'Creando…' : 'Crear pedido'}
+                <span className="cart-submit-label">
+                  {submitting
+                    ? 'Creando…'
+                    : lines.length === 0 || !allComplete
+                      ? 'Completa el pedido'
+                      : 'Crear pedido'}
+                </span>
+                {lines.length > 0 && allComplete && !submitting && (
+                  <span className="cart-submit-price">{formatEUR(total)}</span>
+                )}
               </button>
             </div>
           </aside>
@@ -524,7 +526,6 @@ function BowlConfigModal({
     whey: bowl.whey,
   };
   const complete = isBowlComplete(config);
-  const surcharges = bowlSurcharges(config);
   const gross = bowlGrossPrice(bowl.basePrice, config);
   const discount = lineDiscountAmount(
     gross,
@@ -604,8 +605,14 @@ function BowlConfigModal({
             className="btn btn-primary btn-lg bowl-modal-confirm"
             disabled={!complete}
             onClick={onConfirm}
+            aria-disabled={!complete}
           >
-            {confirmLabel}
+            <span className="bowl-modal-confirm-label">
+              {complete ? confirmLabel : 'Completa el bowl'}
+            </span>
+            {complete && (
+              <span className="bowl-modal-confirm-price">{formatEUR(net)}</span>
+            )}
           </button>
         </div>
       }
@@ -615,19 +622,6 @@ function BowlConfigModal({
         style={{ backgroundImage: `url(${heroImage})` }}
         aria-hidden
       />
-      <div className="custom-builder-heading">
-        <div>
-          <strong>{formatEUR(net)}</strong>
-          <span>
-            Base {formatEUR(bowl.basePrice)} · {bowl.size} ml
-            {surcharges.total > 0 && ` · Extras ${formatEUR(surcharges.total)}`}
-            {discount > 0 && ` · Dto. −${formatEUR(discount)}`}
-          </span>
-        </div>
-        <span className={`builder-status${complete ? ' complete' : ''}`}>
-          {complete ? 'Completo' : 'Faltan opciones'}
-        </span>
-      </div>
 
       <div className="builder-section builder-section-size">
         <div className="builder-section-head">
@@ -694,59 +688,63 @@ function BowlConfigModal({
         }
       />
 
-      <div className="builder-section builder-section-extra">
-        <div className="builder-section-head">
-          <strong>Extras</strong>
-          <span>Opcional</span>
+      <div className="builder-extra-discount-row">
+        <div className="builder-section builder-section-extra">
+          <div className="builder-section-head">
+            <strong>Extras</strong>
+            <span>Opcional</span>
+          </div>
+          <div className="builder-options">
+            <button
+              type="button"
+              className={`builder-option builder-option-extra${bowl.whey ? ' active' : ''}`}
+              aria-pressed={bowl.whey}
+              onClick={() => onChange({ whey: !bowl.whey })}
+            >
+              <span className="builder-option-extra-text">
+                <span>Proteína whey</span>
+                <span className="builder-option-price">
+                  +{formatEUR(WHEY_PRICE)}
+                </span>
+              </span>
+            </button>
+          </div>
         </div>
-        <div className="builder-options">
-          <button
-            type="button"
-            className={`builder-option builder-option-extra${bowl.whey ? ' active' : ''}`}
-            aria-pressed={bowl.whey}
-            onClick={() => onChange({ whey: !bowl.whey })}
-          >
-            <span className="builder-option-extra-text">
-              <span>Proteína whey</span>
-              <span className="builder-option-price">+{formatEUR(WHEY_PRICE)}</span>
-            </span>
-          </button>
-        </div>
-      </div>
 
-      <div className="builder-section builder-section-discount">
-        <div className="builder-section-head">
-          <strong>Descuento</strong>
-          <span>Promociones del sistema</span>
+        <div className="builder-section builder-section-discount">
+          <div className="builder-section-head">
+            <strong>Descuento</strong>
+            <span>Promociones del sistema</span>
+          </div>
+          <div className="discount-compact">
+            <select
+              aria-label="Descuento"
+              className="discount-promo-select"
+              value={bowl.promotionId || ''}
+              onChange={(e) => applyPromotion(e.target.value)}
+            >
+              <option value="">Sin descuento</option>
+              {promotions.map((promo) => (
+                <option key={promo.id} value={promo.id}>
+                  {promo.name}
+                  {promo.type === 'percent'
+                    ? ` (−${promo.value}%)`
+                    : ` (−${formatEUR(promo.value)})`}
+                </option>
+              ))}
+            </select>
+          </div>
+          {promotions.length === 0 && (
+            <p className="discount-preview muted-note">
+              No hay promociones. Créalas en el panel principal.
+            </p>
+          )}
+          {discount > 0 && selectedPromo && (
+            <p className="discount-preview">
+              {selectedPromo.name}: −{formatEUR(discount)}
+            </p>
+          )}
         </div>
-        <div className="discount-compact">
-          <select
-            aria-label="Descuento"
-            className="discount-promo-select"
-            value={bowl.promotionId || ''}
-            onChange={(e) => applyPromotion(e.target.value)}
-          >
-            <option value="">Sin descuento</option>
-            {promotions.map((promo) => (
-              <option key={promo.id} value={promo.id}>
-                {promo.name}
-                {promo.type === 'percent'
-                  ? ` (−${promo.value}%)`
-                  : ` (−${formatEUR(promo.value)})`}
-              </option>
-            ))}
-          </select>
-        </div>
-        {promotions.length === 0 && (
-          <p className="discount-preview muted-note">
-            No hay promociones. Créalas en el panel principal.
-          </p>
-        )}
-        {discount > 0 && selectedPromo && (
-          <p className="discount-preview">
-            {selectedPromo.name}: −{formatEUR(discount)}
-          </p>
-        )}
       </div>
 
       {bowl.productId && !isCustomProduct(bowl.productId) && (

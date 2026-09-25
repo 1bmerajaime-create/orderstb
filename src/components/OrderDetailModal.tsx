@@ -252,7 +252,6 @@ export function TicketModal({
       <Modal
         title={`Pedido #${order.number} creado`}
         onClose={onClose}
-        fullscreen
         className="ticket-ask-modal"
         footer={
           <div className="ticket-ask-actions">
@@ -299,11 +298,63 @@ export function TicketModal({
   }
 
   return (
-    <Modal title={`Ticket #${order.number}`} onClose={onClose} fullscreen>
+    <Modal
+      title={`Ticket #${order.number}`}
+      onClose={onClose}
+      fullscreen
+      className="ticket-send-modal"
+      footer={
+        <div className="ticket-actions">
+          <button
+            type="button"
+            className="btn btn-ghost"
+            disabled={downloading}
+            onClick={handleDownloadPdf}
+          >
+            <Download size={16} /> {downloading ? 'Generando…' : 'Descargar'}
+          </button>
+          <button
+            type="button"
+            className="btn btn-primary"
+            disabled={sending}
+            onClick={handleSend}
+          >
+            <Mail size={16} />{' '}
+            {sending
+              ? 'Enviando…'
+              : 'Enviar'}
+          </button>
+        </div>
+      }
+    >
       <div className="ticket-panel">
+        <div className="field ticket-email-field">
+          <label htmlFor="ticket-email">Email del cliente</label>
+          <input
+            id="ticket-email"
+            type="email"
+            placeholder="cliente@email.com"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            autoFocus
+          />
+          <p className="muted ticket-hint">
+            {hasAutomaticTicketSend()
+              ? `Envío automático del PDF desde ${FROM_EMAIL}.`
+              : `En iPad/móvil el PDF se puede compartir ya adjunto. En escritorio, sin Apps Script, hay que adjuntarlo a mano.`}
+          </p>
+          {emailNote && (
+            <p className="builder-status complete">{emailNote}</p>
+          )}
+        </div>
+
         <div className="ticket-bowls">
           {order.lines.map((line, index) => (
-            <TicketBowlRow key={`${line.productId}-${index}`} line={line} index={index + 1} />
+            <TicketBowlRow
+              key={`${line.productId}-${index}`}
+              line={line}
+              index={index + 1}
+            />
           ))}
         </div>
 
@@ -331,52 +382,6 @@ export function TicketModal({
             <span>{formatEUR(order.total)}</span>
           </div>
         </div>
-
-        <div className="field">
-          <label htmlFor="ticket-email">Email del cliente</label>
-          <input
-            id="ticket-email"
-            type="email"
-            placeholder="cliente@email.com"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            autoFocus
-          />
-        </div>
-
-        {emailNote && <p className="builder-status complete">{emailNote}</p>}
-        <p className="muted ticket-hint">
-          {hasAutomaticTicketSend()
-            ? `Envío automático del PDF desde ${FROM_EMAIL}.`
-            : `En iPad/móvil el PDF se puede compartir ya adjunto. En escritorio, sin Apps Script, hay que adjuntarlo a mano.`}
-        </p>
-
-        <div className="modal-actions ticket-actions">
-          <button type="button" className="btn btn-ghost" onClick={onClose}>
-            Cerrar
-          </button>
-          <button
-            type="button"
-            className="btn btn-ghost"
-            disabled={downloading}
-            onClick={handleDownloadPdf}
-          >
-            <Download size={16} /> {downloading ? 'Generando…' : 'Descargar PDF'}
-          </button>
-          <button
-            type="button"
-            className="btn btn-primary"
-            disabled={sending}
-            onClick={handleSend}
-          >
-            <Mail size={16} />{' '}
-            {sending
-              ? 'Enviando…'
-              : hasAutomaticTicketSend()
-                ? 'Enviar PDF'
-                : 'Enviar ticket'}
-          </button>
-        </div>
       </div>
     </Modal>
   );
@@ -387,8 +392,6 @@ function TicketBowlRow({ line, index }: { line: OrderLine; index: number }) {
   const config = parseRecipe(ingredients);
   const base =
     ingredients.find((item) => /a[cç]a[ií]/i.test(item)) || 'Açaí';
-  const grossUnit =
-    line.baseUnitPrice ?? line.unitPrice + (line.lineDiscount || 0);
   const total = lineTotal(line);
 
   return (
@@ -415,10 +418,9 @@ function TicketBowlRow({ line, index }: { line: OrderLine; index: number }) {
         {config.whey && <li>Extra: {WHEY}</li>}
         {(line.lineDiscount || 0) > 0 && (
           <li>
-            Dto.{line.promotionName ? ` ${line.promotionName}` : ''}: −
+            Descuento
+            {line.promotionName ? ` (${line.promotionName})` : ''}: −
             {formatEUR(line.lineDiscount || 0)}
-            {grossUnit !== line.unitPrice &&
-              ` (${formatEUR(grossUnit)} → ${formatEUR(line.unitPrice)})`}
           </li>
         )}
       </ul>

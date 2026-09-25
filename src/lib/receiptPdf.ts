@@ -1,4 +1,5 @@
 import { jsPDF } from 'jspdf';
+import logoHorizontalUrl from '../assets/logo-horizontal.png';
 import { parseRecipe, WHEY } from './bowl';
 import { lineGrossUnit, lineTotal, receiptTotals, FROM_EMAIL } from './receipt';
 import { IVA_RATE, formatEUR } from './utils';
@@ -9,6 +10,22 @@ const FISCAL = {
   nif: '54213623R',
   address: 'Calle Napoles 8, Pozuelo de Alarcon, 28224, Madrid',
 };
+
+let cachedLogoDataUrl: string | null = null;
+
+async function loadLogoDataUrl(): Promise<string> {
+  if (cachedLogoDataUrl) return cachedLogoDataUrl;
+  const response = await fetch(logoHorizontalUrl);
+  const blob = await response.blob();
+  const dataUrl = await new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result));
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(blob);
+  });
+  cachedLogoDataUrl = dataUrl;
+  return dataUrl;
+}
 
 export function receiptPdfFilename(order: Order): string {
   return `tropic-boost-ticket-${order.number}.pdf`;
@@ -22,7 +39,7 @@ export async function buildReceiptPdf(
   const pageWidth = doc.internal.pageSize.getWidth();
   const margin = 18;
   const contentWidth = pageWidth - margin * 2;
-  let y = 22;
+  let y = 16;
 
   const ensureSpace = (needed: number) => {
     const pageHeight = doc.internal.pageSize.getHeight();
@@ -32,27 +49,31 @@ export async function buildReceiptPdf(
     }
   };
 
-  // Brand left + fiscal data top-right
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(16);
-  doc.text('TROPIC BOOST', margin, y);
+  // Logo izquierda + datos fiscales arriba a la derecha
+  try {
+    const logo = await loadLogoDataUrl();
+    const logoW = 52;
+    const logoH = (207 / 951) * logoW;
+    doc.addImage(logo, 'PNG', margin, y, logoW, logoH);
+  } catch {
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(14);
+    doc.text('TROPIC BOOST', margin, y + 8);
+  }
 
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(8);
   doc.setTextColor(60);
   const fiscalRight = margin + contentWidth;
-  doc.text(FISCAL.name, fiscalRight, y - 2, { align: 'right' });
-  doc.text(FISCAL.nif, fiscalRight, y + 2.5, { align: 'right' });
+  doc.text(FISCAL.name, fiscalRight, y + 3, { align: 'right' });
+  doc.text(FISCAL.nif, fiscalRight, y + 7.5, { align: 'right' });
   const addressLines = doc.splitTextToSize(FISCAL.address, 72);
-  doc.text(addressLines, fiscalRight, y + 7, { align: 'right' });
+  doc.text(addressLines, fiscalRight, y + 12, { align: 'right' });
   doc.setTextColor(0);
 
-  y += 12;
+  y += 22;
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(11);
-  doc.text('Ticket de pedido', margin, y);
-  y += 5.5;
-  doc.setFontSize(12);
+  doc.setFontSize(13);
   doc.text('Factura simplificada', margin, y);
   y += 10;
 
@@ -95,9 +116,11 @@ export async function buildReceiptPdf(
   y += 8;
 
   const totals = receiptTotals(order);
+  const allDiscounts = totals.lineDiscounts + totals.orderDiscount;
+
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(11);
-  doc.text('Totales pedido (IVA incluido)', margin, y);
+  doc.text('Totales (IVA incluido)', margin, y);
   y += 7;
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(10);
@@ -105,11 +128,8 @@ export async function buildReceiptPdf(
   const totalRows: Array<[string, string]> = [
     ['Subtotal', formatEUR(totals.subtotal)],
   ];
-  if (totals.lineDiscounts > 0) {
-    totalRows.push(['Descuentos', `−${formatEUR(totals.lineDiscounts)}`]);
-  }
-  if (totals.orderDiscount > 0) {
-    totalRows.push(['Descuento pedido', `−${formatEUR(totals.orderDiscount)}`]);
+  if (allDiscounts > 0) {
+    totalRows.push(['Descuentos', `−${formatEUR(allDiscounts)}`]);
   }
   totalRows.push(
     ['Base imponible', formatEUR(totals.net)],
@@ -127,8 +147,10 @@ export async function buildReceiptPdf(
   ensureSpace(8);
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(12);
-  doc.text('TOTAL PEDIDO', margin, y);
-  doc.text(formatEUR(totals.total), margin + contentWidth, y, { align: 'right' });
+  doc.text('TOTAL', margin, y);
+  doc.text(formatEUR(totals.total), margin + contentWidth, y, {
+    align: 'right',
+  });
   y += 12;
 
   doc.setFont('helvetica', 'normal');
@@ -161,11 +183,11 @@ function drawBowl(
   const base =
     ingredients.find((item) => /a[cç]a[ií]/i.test(item)) || 'Açaí';
   const grossUnit = lineGrossUnit(line);
+  const hasDiscount = (line.lineDiscount || 0) > 0;
 
   ensureSpace(28);
   doc.setFont('helvetica', 'bold');
   doc.text(`${index}. ${line.quantity}× ${line.productName}`, margin, y);
-  doc.text(formatEUR(total), margin + contentWidth, y, { align: 'right' });
   y += 5.5;
 
   doc.setFont('helvetica', 'normal');
@@ -176,9 +198,6 @@ function drawBowl(
     config.solids.length ? `Duro: ${config.solids.join(', ')}` : '',
     config.softs.length ? `Blando: ${config.softs.join(', ')}` : '',
     config.whey ? `Extra: ${WHEY}` : '',
-    (line.lineDiscount || 0) > 0
-      ? `Dto.${line.promotionName ? ` ${line.promotionName}` : ''}: −${formatEUR(line.lineDiscount || 0)} (${formatEUR(grossUnit)} → ${formatEUR(line.unitPrice)})`
-      : '',
   ].filter(Boolean);
 
   for (const detail of details) {
@@ -188,6 +207,26 @@ function drawBowl(
     y += 4.8;
   }
   doc.setTextColor(0);
+
+  ensureSpace(6);
+  doc.setFont('helvetica', 'normal');
+  doc.text(`Precio${line.quantity > 1 ? ' ud.' : ''}`, margin + 2, y);
+  doc.text(formatEUR(grossUnit), margin + contentWidth, y, { align: 'right' });
+  y += 4.8;
+
+  if (hasDiscount) {
+    ensureSpace(5);
+    const dtoLabel = line.promotionName
+      ? `Descuento (${line.promotionName})`
+      : 'Descuento';
+    doc.setTextColor(70);
+    doc.text(dtoLabel, margin + 2, y);
+    doc.text(`−${formatEUR(line.lineDiscount || 0)}`, margin + contentWidth, y, {
+      align: 'right',
+    });
+    doc.setTextColor(0);
+    y += 4.8;
+  }
 
   ensureSpace(6);
   doc.setFont('helvetica', 'bold');

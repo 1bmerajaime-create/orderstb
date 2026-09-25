@@ -55,7 +55,7 @@ export function buildReceiptText(order: Order, eventName?: string): string {
     .join('\n\n');
 
   return [
-    'TROPIC BOOST · Ticket de pedido - Factura simplificada',
+    'TROPIC BOOST · Factura simplificada',
     'Carlos Garcia Pereda · 54213623R',
     'Calle Napoles 8, Pozuelo de Alarcon, 28224, Madrid',
     eventName ? `Evento: ${eventName}` : '',
@@ -68,17 +68,14 @@ export function buildReceiptText(order: Order, eventName?: string): string {
     '— Bowls —',
     lines,
     '',
-    '— Totales pedido (IVA incluido) —',
+    '— Totales (IVA incluido) —',
     `Subtotal: ${formatEUR(totals.subtotal)}`,
-    totals.lineDiscounts > 0
-      ? `Descuentos: −${formatEUR(totals.lineDiscounts)}`
-      : '',
-    totals.orderDiscount > 0
-      ? `Descuento pedido: −${formatEUR(totals.orderDiscount)}`
+    totals.lineDiscounts + totals.orderDiscount > 0
+      ? `Descuentos: −${formatEUR(totals.lineDiscounts + totals.orderDiscount)}`
       : '',
     `Base imponible: ${formatEUR(totals.net)}`,
     `IVA (${Math.round(IVA_RATE * 100)}%): ${formatEUR(totals.iva)}`,
-    `TOTAL PEDIDO: ${formatEUR(totals.total)}`,
+    `TOTAL: ${formatEUR(totals.total)}`,
     '',
     'Gracias por tu pedido · Tropic Boost',
     FROM_EMAIL,
@@ -105,11 +102,11 @@ function formatLine(line: OrderLine, index: number): string {
   ].filter(Boolean);
 
   const priceRows = [
-    `   Precio bowl: ${formatEUR(grossUnit)}`,
+    `   Precio${line.quantity > 1 ? ' ud.' : ''}: ${formatEUR(grossUnit)}`,
     line.lineDiscount && line.lineDiscount > 0
-      ? `   Dto.${line.promotionName ? ` ${line.promotionName}` : ''}: −${formatEUR(line.lineDiscount)}`
+      ? `   Descuento${line.promotionName ? ` (${line.promotionName})` : ''}: −${formatEUR(line.lineDiscount)}`
       : '',
-    `   TOTAL BOWL: ${formatEUR(total)}`,
+    `   Total bowl: ${formatEUR(total)}`,
   ].filter(Boolean);
 
   return [
