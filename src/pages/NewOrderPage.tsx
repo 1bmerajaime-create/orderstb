@@ -10,6 +10,7 @@ import {
   FREE_SOLID,
   FRUITS,
   PISTACHIO,
+  PISTACHIO_SURCHARGE,
   SOLID_TOPPINGS,
   SOFT_TOPPINGS,
   WHEY_PRICE,
@@ -570,9 +571,11 @@ function BowlConfigModal({
         options={[...SOFT_TOPPINGS]}
         selected={bowl.softs}
         maxFree={FREE_SOFT}
-        optionSuffix={(option) => (option === PISTACHIO ? ' · +1 €' : '')}
         onToggle={(option) =>
           onChange({ softs: toggleInList(bowl.softs, option) })
+        }
+        optionFee={(option, paid) =>
+          option === PISTACHIO ? PISTACHIO_SURCHARGE : paid ? 1 : 0
         }
       />
 
@@ -683,7 +686,7 @@ function ToppingSection({
   selected,
   maxFree,
   onToggle,
-  optionSuffix,
+  optionFee,
 }: {
   variant: 'duro' | 'blando' | 'fruta';
   title: string;
@@ -692,7 +695,8 @@ function ToppingSection({
   selected: string[];
   maxFree: number;
   onToggle: (option: string) => void;
-  optionSuffix?: (option: string) => string;
+  /** Importe extra a mostrar (p. ej. pistacho + extra de cupo). */
+  optionFee?: (option: string, paidExtra: boolean) => number;
 }) {
   const freeUsed = Math.min(selected.length, maxFree);
   const extras = Math.max(0, selected.length - maxFree);
@@ -712,16 +716,18 @@ function ToppingSection({
         {options.map((option) => {
           const active = selected.includes(option);
           const paid = active && isPaidExtra(selected, option, maxFree);
+          const fee =
+            optionFee?.(option, paid) ?? (paid ? 1 : 0);
+          const showPaidStyle = option === PISTACHIO ? false : paid;
           return (
             <button
               key={option}
               type="button"
-              className={`builder-option${active ? ' active' : ''}${paid ? ' paid-extra' : ''}`}
+              className={`builder-option${active ? ' active' : ''}${showPaidStyle ? ' paid-extra' : ''}`}
               onClick={() => onToggle(option)}
             >
               {option}
-              {optionSuffix?.(option)}
-              {paid ? ' · +1 €' : ''}
+              {fee > 0 ? ` · +${fee} €` : ''}
             </button>
           );
         })}
