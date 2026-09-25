@@ -631,6 +631,36 @@ tbody tr.row-clickable:hover td {
   width: min(780px, 100%);
 }
 
+.modal-backdrop-fullscreen {
+  padding: 0;
+  align-items: stretch;
+}
+
+.modal.modal-fullscreen {
+  width: 100%;
+  max-width: none;
+  height: 100dvh;
+  max-height: 100dvh;
+  border-radius: 0;
+  border-left: none;
+  border-right: none;
+}
+
+@media (min-width: 900px) {
+  .modal-backdrop-fullscreen {
+    padding: 1rem;
+    align-items: center;
+  }
+
+  .modal.modal-fullscreen {
+    width: min(780px, 100%);
+    height: auto;
+    max-height: min(92dvh, 900px);
+    border-radius: var(--radius);
+    border: 1px solid var(--line);
+  }
+}
+
 .modal-header {
   display: flex;
   align-items: flex-start;
@@ -1383,6 +1413,19 @@ tbody tr.row-clickable:hover td {
   padding: 0.85rem 1rem 1.5rem;
 }
 
+@media (max-width: 980px) {
+  .app-shell:has(.page-order-new) {
+    min-height: 100dvh;
+  }
+
+  .page-order-new {
+    width: 100%;
+    min-height: 100dvh;
+    padding: 0.65rem 0.75rem calc(1rem + env(safe-area-inset-bottom, 0px));
+    box-sizing: border-box;
+  }
+}
+
 .order-new-header {
   display: flex;
   align-items: flex-start;
@@ -1456,6 +1499,95 @@ tbody tr.row-clickable:hover td {
 .product-picker-compact {
   grid-template-columns: repeat(auto-fill, minmax(148px, 1fr));
   gap: 0.4rem;
+}
+
+.product-picker-visual {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.65rem;
+}
+
+@media (min-width: 720px) {
+  .product-picker-visual {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+.picker-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  padding: 0;
+  overflow: hidden;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--line);
+  background: rgba(14, 6, 24, 0.55);
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    border-color 0.18s var(--ease),
+    transform 0.12s var(--ease),
+    box-shadow 0.18s var(--ease);
+}
+
+.picker-card:hover {
+  border-color: rgba(168, 85, 224, 0.55);
+  box-shadow: 0 8px 24px rgba(80, 20, 120, 0.25);
+}
+
+.picker-card:active {
+  transform: scale(0.985);
+}
+
+.picker-card.selected {
+  border-color: rgba(168, 85, 224, 0.75);
+  box-shadow: 0 0 0 1px rgba(168, 85, 224, 0.35);
+}
+
+.picker-card-media {
+  display: block;
+  aspect-ratio: 1 / 1.05;
+  background-size: cover;
+  background-position: center;
+  background-color: #4a0d3a;
+}
+
+.picker-card-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  padding: 0.55rem 0.65rem 0.65rem;
+}
+
+.picker-card-name {
+  font-family: var(--display);
+  font-size: 0.9rem;
+  font-weight: 700;
+  line-height: 1.15;
+  padding-right: 1.2rem;
+}
+
+.picker-card-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--lavender-bright);
+}
+
+.picker-card-plus {
+  position: absolute;
+  top: 0.45rem;
+  right: 0.45rem;
+  width: 28px;
+  height: 28px;
+  padding: 6px;
+  border-radius: 50%;
+  background: rgba(14, 6, 24, 0.55);
+  color: #fff;
+  backdrop-filter: blur(4px);
 }
 
 .picker-chip {
@@ -1835,9 +1967,48 @@ tbody tr.row-clickable:hover td {
 }
 
 .bowl-modal .modal-body {
+  position: relative;
   display: flex;
   flex-direction: column;
   gap: 1.1rem;
+  isolation: isolate;
+}
+
+.bowl-modal-hero {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  background-size: cover;
+  background-position: center top;
+  filter: blur(18px) saturate(1.15);
+  transform: scale(1.12);
+  opacity: 0.45;
+  pointer-events: none;
+}
+
+.bowl-modal-hero::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    180deg,
+    rgba(14, 6, 24, 0.55) 0%,
+    rgba(14, 6, 24, 0.82) 45%,
+    rgba(14, 6, 24, 0.94) 100%
+  );
+}
+
+.bowl-modal .modal-body > *:not(.bowl-modal-hero) {
+  position: relative;
+  z-index: 1;
+}
+
+.bowl-modal .modal-header,
+.bowl-modal .modal-footer {
+  position: relative;
+  z-index: 2;
+  background: rgba(14, 6, 24, 0.88);
+  backdrop-filter: blur(12px);
 }
 
 .bowl-modal-footer {

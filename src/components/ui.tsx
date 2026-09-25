@@ -9,6 +9,7 @@ export function Modal({
   children,
   onClose,
   wide,
+  fullscreen,
   className,
   headerActions,
   footer,
@@ -17,6 +18,8 @@ export function Modal({
   children: ReactNode;
   onClose: () => void;
   wide?: boolean;
+  /** Pantalla completa en móvil (p. ej. configurar bowl). */
+  fullscreen?: boolean;
   className?: string;
   headerActions?: ReactNode;
   footer?: ReactNode;
@@ -29,10 +32,24 @@ export function Modal({
     };
   }, []);
 
+  const classes = [
+    'modal',
+    wide ? 'wide' : '',
+    fullscreen ? 'modal-fullscreen' : '',
+    footer ? 'has-footer' : '',
+    className || '',
+  ]
+    .filter(Boolean)
+    .join(' ');
+
   return (
-    <div className="modal-backdrop" onClick={onClose} role="presentation">
+    <div
+      className={`modal-backdrop${fullscreen ? ' modal-backdrop-fullscreen' : ''}`}
+      onClick={onClose}
+      role="presentation"
+    >
       <div
-        className={`modal${wide ? ' wide' : ''}${className ? ` ${className}` : ''}${footer ? ' has-footer' : ''}`}
+        className={classes}
         onClick={(e) => e.stopPropagation()}
         role="dialog"
         aria-modal="true"

@@ -1,8 +1,14 @@
 import { jsPDF } from 'jspdf';
 import { parseRecipe, WHEY } from './bowl';
-import { lineTotal, receiptTotals, FROM_EMAIL } from './receipt';
+import { lineGrossUnit, lineTotal, receiptTotals, FROM_EMAIL } from './receipt';
 import { IVA_RATE, formatEUR } from './utils';
 import type { Order, OrderLine } from '../types';
+
+const FISCAL = {
+  name: 'Carlos Garcia Pereda',
+  nif: '54213623R',
+  address: 'Calle Napoles 8, Pozuelo de Alarcon, 28224, Madrid',
+};
 
 export function receiptPdfFilename(order: Order): string {
   return `tropic-boost-ticket-${order.number}.pdf`;
@@ -26,15 +32,31 @@ export async function buildReceiptPdf(
     }
   };
 
+  // Brand left + fiscal data top-right
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(16);
   doc.text('TROPIC BOOST', margin, y);
-  y += 7;
-  doc.setFontSize(11);
+
   doc.setFont('helvetica', 'normal');
+  doc.setFontSize(8);
+  doc.setTextColor(60);
+  const fiscalRight = margin + contentWidth;
+  doc.text(FISCAL.name, fiscalRight, y - 2, { align: 'right' });
+  doc.text(FISCAL.nif, fiscalRight, y + 2.5, { align: 'right' });
+  const addressLines = doc.splitTextToSize(FISCAL.address, 72);
+  doc.text(addressLines, fiscalRight, y + 7, { align: 'right' });
+  doc.setTextColor(0);
+
+  y += 12;
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(11);
   doc.text('Ticket de pedido', margin, y);
+  y += 5.5;
+  doc.setFontSize(12);
+  doc.text('Factura simplificada', margin, y);
   y += 10;
 
+  doc.setFont('helvetica', 'normal');
   doc.setFontSize(10);
   const meta = [
     eventName ? `Evento: ${eventName}` : '',
@@ -84,7 +106,7 @@ export async function buildReceiptPdf(
     ['Subtotal', formatEUR(totals.subtotal)],
   ];
   if (totals.lineDiscounts > 0) {
-    totalRows.push(['Descuentos por bowl', `−${formatEUR(totals.lineDiscounts)}`]);
+    totalRows.push(['Descuentos', `−${formatEUR(totals.lineDiscounts)}`]);
   }
   if (totals.orderDiscount > 0) {
     totalRows.push(['Descuento pedido', `−${formatEUR(totals.orderDiscount)}`]);
@@ -138,8 +160,7 @@ function drawBowl(
   const config = parseRecipe(ingredients);
   const base =
     ingredients.find((item) => /a[cç]a[ií]/i.test(item)) || 'Açaí';
-  const grossUnit =
-    line.baseUnitPrice ?? line.unitPrice + (line.lineDiscount || 0);
+  const grossUnit = lineGrossUnit(line);
 
   ensureSpace(28);
   doc.setFont('helvetica', 'bold');

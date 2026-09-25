@@ -18,6 +18,7 @@ import {
   eventMaterialsCost,
   formatDateRange,
   formatEUR,
+  IVA_RATE,
   round2,
   uid,
 } from "../lib/utils";
@@ -305,7 +306,7 @@ export function EventDashboardPage() {
               <Money value={kpis.reserva} />
             </div>
             <div className="kpi-hint">
-              Sin IVA 21% − materia prima − coste (
+              Sin IVA {Math.round(IVA_RATE * 100)}% − materia prima − coste (
               {formatEUR(kpis.eventCost)})
             </div>
           </div>

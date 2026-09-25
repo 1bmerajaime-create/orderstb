@@ -13,18 +13,25 @@ export interface ReceiptTotals {
   iva: number;
 }
 
+export function lineGrossUnit(line: OrderLine): number {
+  if (typeof line.baseUnitPrice === 'number') return line.baseUnitPrice;
+  return round2(line.unitPrice + (line.lineDiscount || 0));
+}
+
 export function receiptTotals(order: Order): ReceiptTotals {
   const lineDiscounts = round2(
-    order.lines.reduce((sum, line) => sum + (line.lineDiscount || 0) * line.quantity, 0),
-  );
-  const grossLines = round2(
     order.lines.reduce(
-      (sum, line) =>
-        sum + ((line.baseUnitPrice ?? line.unitPrice) + (line.lineDiscount || 0)) * line.quantity,
+      (sum, line) => sum + (line.lineDiscount || 0) * line.quantity,
       0,
     ),
   );
-  const subtotal = order.subtotal || grossLines;
+  /** Subtotal = importes antes de descuentos de línea (no el order.subtotal neto). */
+  const subtotal = round2(
+    order.lines.reduce(
+      (sum, line) => sum + lineGrossUnit(line) * line.quantity,
+      0,
+    ),
+  );
   const orderDiscount = order.discount || 0;
   const total = order.total;
   return {
@@ -48,7 +55,9 @@ export function buildReceiptText(order: Order, eventName?: string): string {
     .join('\n\n');
 
   return [
-    'TROPIC BOOST · Ticket de pedido',
+    'TROPIC BOOST · Ticket de pedido - Factura simplificada',
+    'Carlos Garcia Pereda · 54213623R',
+    'Calle Napoles 8, Pozuelo de Alarcon, 28224, Madrid',
     eventName ? `Evento: ${eventName}` : '',
     `Pedido #${order.number}`,
     `Cliente: ${order.customerName}`,
@@ -62,7 +71,7 @@ export function buildReceiptText(order: Order, eventName?: string): string {
     '— Totales pedido (IVA incluido) —',
     `Subtotal: ${formatEUR(totals.subtotal)}`,
     totals.lineDiscounts > 0
-      ? `Descuentos por bowl: −${formatEUR(totals.lineDiscounts)}`
+      ? `Descuentos: −${formatEUR(totals.lineDiscounts)}`
       : '',
     totals.orderDiscount > 0
       ? `Descuento pedido: −${formatEUR(totals.orderDiscount)}`
@@ -79,7 +88,7 @@ export function buildReceiptText(order: Order, eventName?: string): string {
 }
 
 function formatLine(line: OrderLine, index: number): string {
-  const grossUnit = line.baseUnitPrice ?? line.unitPrice + (line.lineDiscount || 0);
+  const grossUnit = lineGrossUnit(line);
   const total = lineTotal(line);
   const ingredients = line.ingredients || [];
   const config = parseRecipe(ingredients);

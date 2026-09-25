@@ -13,6 +13,7 @@ import { useStore } from '../lib/store';
 import {
   formatEUR,
   formatTime,
+  IVA_RATE,
   ivaFromGross,
   netFromGross,
 } from '../lib/utils';
@@ -245,7 +246,7 @@ export function TicketModal({
 
   if (step === 'ask') {
     return (
-      <Modal title={`Pedido #${order.number} creado`} onClose={onClose}>
+      <Modal title={`Pedido #${order.number} creado`} onClose={onClose} fullscreen>
         <p className="order-detail-desc">
           ¿Quieres enviar el ticket por correo al cliente?
         </p>
@@ -266,7 +267,7 @@ export function TicketModal({
   }
 
   return (
-    <Modal title={`Ticket #${order.number}`} onClose={onClose}>
+    <Modal title={`Ticket #${order.number}`} onClose={onClose} fullscreen>
       <div className="ticket-panel">
         <div className="ticket-bowls">
           {order.lines.map((line, index) => (
@@ -290,7 +291,7 @@ export function TicketModal({
             <span>{formatEUR(netFromGross(order.total))}</span>
           </div>
           <div className="totals-row">
-            <span>IVA 21%</span>
+            <span>IVA {Math.round(IVA_RATE * 100)}%</span>
             <span>{formatEUR(ivaFromGross(order.total))}</span>
           </div>
           <div className="totals-row grand">

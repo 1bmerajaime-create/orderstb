@@ -21,7 +21,8 @@ export function formatEUR(value: number): string {
   }).format(value);
 }
 
-export const IVA_RATE = 0.21;
+/** IVA reducido hostelería / alimentación (incluido en precios). */
+export const IVA_RATE = 0.1;
 
 /** Importe de IVA contenido en un total con IVA incluido */
 export function ivaFromGross(gross: number): number {

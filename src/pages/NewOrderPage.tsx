@@ -29,10 +29,9 @@ import { useStore } from '../lib/store';
 import {
   calcSubtotal,
   formatEUR,
-  ivaFromGross,
-  netFromGross,
   uid,
 } from '../lib/utils';
+import { productImageUrl } from '../lib/productImages';
 import type {
   Order,
   OrderLine,
@@ -280,28 +279,36 @@ export function NewOrderPage() {
               />
             </div>
 
-            <p className="order-modal-label">Añadir bowl</p>
-            <div className="product-picker product-picker-compact">
+            <p className="order-modal-label">Elige tu açaí</p>
+            <div className="product-picker product-picker-visual">
               {data.products.map((product) => {
                 const count = bowls.filter(
                   (bowl) => bowl.productId === product.id,
                 ).length;
                 const unitPrice = Number(product.price) || 0;
+                const image = productImageUrl(product.id, product.name);
                 return (
                   <button
                     key={product.id}
                     type="button"
-                    className={`picker-chip${count > 0 ? ' selected' : ''}`}
+                    className={`picker-card${count > 0 ? ' selected' : ''}`}
                     onClick={() => startNewBowl(product)}
                   >
-                    <span className="picker-chip-name">{product.name}</span>
-                    <span className="picker-chip-meta">
-                      {formatEUR(unitPrice)}
-                      {count > 0 && (
-                        <span className="picker-chip-count">{count}</span>
-                      )}
+                    <span
+                      className="picker-card-media"
+                      style={{ backgroundImage: `url(${image})` }}
+                      aria-hidden
+                    />
+                    <span className="picker-card-body">
+                      <span className="picker-card-name">{product.name}</span>
+                      <span className="picker-card-meta">
+                        {formatEUR(unitPrice)}
+                        {count > 0 && (
+                          <span className="picker-chip-count">{count}</span>
+                        )}
+                      </span>
                     </span>
-                    <Plus size={14} className="picker-chip-plus" aria-hidden />
+                    <Plus size={16} className="picker-card-plus" aria-hidden />
                   </button>
                 );
               })}
@@ -409,14 +416,6 @@ export function NewOrderPage() {
 
             <div className="cart-footer">
               <div className="totals totals-inline">
-                <div className="totals-row">
-                  <span>Base (sin IVA)</span>
-                  <span>{formatEUR(netFromGross(total))}</span>
-                </div>
-                <div className="totals-row">
-                  <span>IVA 21%</span>
-                  <span>{formatEUR(ivaFromGross(total))}</span>
-                </div>
                 <div className="totals-row grand">
                   <span>Total</span>
                   <span>{formatEUR(total)}</span>
@@ -503,6 +502,7 @@ function BowlConfigModal({
     bowl.discountValue,
   );
   const selectedPromo = promotions.find((p) => p.id === bowl.promotionId);
+  const heroImage = productImageUrl(bowl.productId, bowl.productName);
 
   function applyPromotion(promotionId: string) {
     if (!promotionId) {
@@ -527,6 +527,7 @@ function BowlConfigModal({
       title={`Configurar ${bowl.productName}`}
       onClose={onCancel}
       wide
+      fullscreen
       className="bowl-modal"
       footer={
         <div className="bowl-modal-footer">
@@ -550,6 +551,11 @@ function BowlConfigModal({
         </div>
       }
     >
+      <div
+        className="bowl-modal-hero"
+        style={{ backgroundImage: `url(${heroImage})` }}
+        aria-hidden
+      />
       <div className="custom-builder-heading">
         <div>
           <strong>{formatEUR(net)}</strong>

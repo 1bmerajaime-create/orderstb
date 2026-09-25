@@ -17,6 +17,7 @@ import {
   formatDateRange,
   formatEUR,
   globalKPIs,
+  IVA_RATE,
   toLocalISO,
 } from "../lib/utils";
 import type {
@@ -703,7 +704,7 @@ export function HomePage() {
               </strong>
             </div>
             <div className="breakdown-row">
-              <span>IVA 21% (incluido)</span>
+              <span>IVA {Math.round(IVA_RATE * 100)}% (incluido)</span>
               <strong className="num-negative">
                 −{formatEUR(homeKpis.iva)}
               </strong>
