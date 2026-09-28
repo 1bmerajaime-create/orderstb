@@ -10,6 +10,7 @@ export function Modal({
   onClose,
   wide,
   fullscreen,
+  cover,
   className,
   headerActions,
   footer,
@@ -20,6 +21,8 @@ export function Modal({
   wide?: boolean;
   /** Pantalla completa en móvil (p. ej. configurar bowl). */
   fullscreen?: boolean;
+  /** Edge-to-edge también en desktop (p. ej. pedido en curso). */
+  cover?: boolean;
   className?: string;
   headerActions?: ReactNode;
   footer?: ReactNode;
@@ -36,6 +39,7 @@ export function Modal({
     'modal',
     wide ? 'wide' : '',
     fullscreen ? 'modal-fullscreen' : '',
+    cover ? 'modal-cover' : '',
     footer ? 'has-footer' : '',
     className || '',
   ]
@@ -44,7 +48,7 @@ export function Modal({
 
   return (
     <div
-      className={`modal-backdrop${fullscreen ? ' modal-backdrop-fullscreen' : ''}`}
+      className={`modal-backdrop${fullscreen ? ' modal-backdrop-fullscreen' : ''}${cover ? ' modal-backdrop-cover' : ''}`}
       onClick={onClose}
       role="presentation"
     >

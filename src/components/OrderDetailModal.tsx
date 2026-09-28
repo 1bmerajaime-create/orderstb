@@ -2,6 +2,7 @@ import { CheckCircle2, Download, Mail, Ticket, Trash2 } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { Modal } from './ui';
 import { parseRecipe, WHEY } from '../lib/bowl';
+import { ingredientVisual } from '../lib/ingredientVisuals';
 import {
   sendReceiptEmail,
   downloadReceiptPdf,
@@ -20,6 +21,10 @@ import {
 } from '../lib/utils';
 import type { Order, OrderLine } from '../types';
 
+function isInProgressStatus(status: Order['status']) {
+  return status === 'pendiente' || status === 'en_preparacion';
+}
+
 export function OrderDetailModal({
   order,
   onClose,
@@ -35,13 +40,17 @@ export function OrderDetailModal({
     () => resolveAllProducts(data.products, data.recipes, data.sizes),
     [data.products, data.recipes, data.sizes],
   );
+  const prepView = isInProgressStatus(currentOrder.status);
 
   return (
     <>
       <Modal
         title={`Pedido #${currentOrder.number}`}
         onClose={onClose}
-        wide
+        wide={!prepView}
+        fullscreen={prepView}
+        cover={prepView}
+        className={prepView ? 'order-prep-modal' : undefined}
         headerActions={
           <button
             type="button"
@@ -53,24 +62,27 @@ export function OrderDetailModal({
           </button>
         }
       >
-        <div className="order-detail">
+        <div className={`order-detail${prepView ? ' order-detail-prep' : ''}`}>
           <div className="order-detail-summary">
             <strong>{currentOrder.customerName}</strong>
             <span>{formatTime(currentOrder.createdAt)}</span>
           </div>
 
           <div className="order-detail-lines">
-            <div className="bowl-table">
-              {currentOrder.lines.map((line, index) => (
-                <BowlLineRow
-                  key={`${line.productId}-${index}`}
-                  line={line}
-                  fallbackIngredients={
-                    resolvedProducts.find((p) => p.id === line.productId)
-                      ?.ingredients || []
-                  }
-                />
-              ))}
+            <div className={`bowl-table${prepView ? ' bowl-table-prep' : ''}`}>
+              {currentOrder.lines.map((line, index) => {
+                const recipe =
+                  resolvedProducts.find((p) => p.id === line.productId) ||
+                  resolvedProducts.find((p) => p.name === line.productName);
+                return (
+                  <BowlLineRow
+                    key={`${line.productId}-${index}`}
+                    line={line}
+                    visual={prepView}
+                    fallbackIngredients={recipe?.ingredients || []}
+                  />
+                );
+              })}
             </div>
           </div>
 
@@ -122,9 +134,11 @@ export function OrderDetailModal({
 function BowlLineRow({
   line,
   fallbackIngredients,
+  visual = false,
 }: {
   line: OrderLine;
   fallbackIngredients: string[];
+  visual?: boolean;
 }) {
   const ingredients = line.ingredients?.length
     ? line.ingredients
@@ -132,24 +146,65 @@ function BowlLineRow({
   const config = parseRecipe(ingredients);
   const base = ingredients.find((item) => /a[cç]a[ií]/i.test(item)) || 'Açaí';
   const extras = config.whey ? [WHEY] : [];
+  const isSimple =
+    !ingredients.length ||
+    (!/a[cç]a[ií]/i.test(ingredients.join(' ')) &&
+      config.fruits.length === 0 &&
+      config.solids.length === 0 &&
+      config.softs.length === 0 &&
+      !config.whey);
 
   return (
-    <div className="bowl-table-row">
+    <div className={`bowl-table-row${visual ? ' bowl-table-row-visual' : ''}`}>
       <div className="bowl-table-product">
         <strong>
           {line.quantity}× {line.productName}
+          {visual && line.size ? ` · ${line.size} ml` : ''}
         </strong>
         {line.customized && (
           <span className="customized-badge">Modificado</span>
         )}
       </div>
       <div className="bowl-table-sections">
-        <ChipCell kind="base" label="Base" values={[base]} />
-        <ChipCell kind="fruta" label="Fruta" values={config.fruits} />
-        <ChipCell kind="duro" label="Duro" values={config.solids} />
-        <ChipCell kind="blando" label="Blando" values={config.softs} />
-        {extras.length > 0 && (
-          <ChipCell kind="extra" label="Extra" values={extras} />
+        {isSimple ? (
+          !visual ? (
+            <div className="bowl-breakdown-col">
+              <span className="bowl-breakdown-label">Producto</span>
+              <div className="bowl-breakdown-chips">
+                <span className="bowl-chip">{line.productName}</span>
+              </div>
+            </div>
+          ) : null
+        ) : (
+          <>
+            <ChipCell kind="base" label="Base" values={[base]} visual={visual} />
+            <ChipCell
+              kind="fruta"
+              label="Fruta"
+              values={config.fruits}
+              visual={visual}
+            />
+            <ChipCell
+              kind="duro"
+              label="Duro"
+              values={config.solids}
+              visual={visual}
+            />
+            <ChipCell
+              kind="blando"
+              label="Blando"
+              values={config.softs}
+              visual={visual}
+            />
+            {extras.length > 0 && (
+              <ChipCell
+                kind="extra"
+                label="Extra"
+                values={extras}
+                visual={visual}
+              />
+            )}
+          </>
         )}
       </div>
     </div>
@@ -160,26 +215,58 @@ function ChipCell({
   kind,
   label,
   values,
+  visual = false,
 }: {
   kind: string;
   label: string;
   values: string[];
+  visual?: boolean;
 }) {
   return (
     <div className={`bowl-breakdown-col bowl-breakdown-${kind}`}>
       <span className="bowl-breakdown-label">{label}</span>
-      <div className="bowl-breakdown-chips">
+      <div
+        className={`bowl-breakdown-chips${visual ? ' bowl-breakdown-avatars' : ''}`}
+      >
         {values.length > 0 ? (
-          values.map((value) => (
-            <span key={value} className="bowl-chip">
-              {value}
-            </span>
-          ))
+          values.map((value) =>
+            visual ? (
+              <IngredientAvatar key={value} name={value} />
+            ) : (
+              <span key={value} className="bowl-chip">
+                {value}
+              </span>
+            ),
+          )
+        ) : visual ? (
+          <span className="ingredient-avatar muted" aria-hidden>
+            <span className="ingredient-avatar-img">—</span>
+          </span>
         ) : (
           <span className="bowl-chip muted">—</span>
         )}
       </div>
     </div>
+  );
+}
+
+function IngredientAvatar({ name }: { name: string }) {
+  const { imageUrl, emoji, tint } = ingredientVisual(name);
+  return (
+    <span className="ingredient-avatar" title={name}>
+      <span
+        className={`ingredient-avatar-img${imageUrl ? ' has-photo' : ''}`}
+        style={
+          imageUrl
+            ? { backgroundImage: `url(${imageUrl})` }
+            : { background: tint }
+        }
+        aria-hidden
+      >
+        {!imageUrl ? emoji : null}
+      </span>
+      <span className="ingredient-avatar-label">{name}</span>
+    </span>
   );
 }
 

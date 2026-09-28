@@ -1,5 +1,10 @@
 import type { AppData } from '../types';
-import { CANONICAL_RECIPES, CANONICAL_SIZES } from './productSizes';
+import {
+  CANONICAL_RECIPES,
+  CANONICAL_SIMPLE_RECIPES,
+  CANONICAL_SIZES,
+  UNIT_SIZE,
+} from './productSizes';
 
 export const PASSWORD = 'tropic.boost';
 
@@ -44,13 +49,26 @@ export const seedData: AppData = {
       materialsUsed: [],
     },
   ],
-  recipes: structuredClone(CANONICAL_RECIPES),
-  sizes: structuredClone(CANONICAL_SIZES),
+  recipes: [
+    ...structuredClone(CANONICAL_RECIPES),
+    ...structuredClone(CANONICAL_SIMPLE_RECIPES),
+  ],
+  sizes: [...structuredClone(CANONICAL_SIZES), structuredClone(UNIT_SIZE)],
   products: [
     ...linesForRecipe('prod-dulcecita'),
     ...linesForRecipe('prod-tropicoqueta'),
     ...linesForRecipe('prod-lotus'),
     ...linesForRecipe('prod-custom'),
+    {
+      id: 'prod-agua-ud',
+      recipeId: 'prod-agua',
+      sizeId: UNIT_SIZE.id,
+    },
+    {
+      id: 'prod-refresco-ud',
+      recipeId: 'prod-refresco',
+      sizeId: UNIT_SIZE.id,
+    },
   ],
   materials: [
     { id: 'mat-acai', name: 'Açaí base', price: 4.2, unit: 'kg', kind: 'otro' },

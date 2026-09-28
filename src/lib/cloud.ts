@@ -23,7 +23,9 @@ import { getDb } from './firebase';
 import { seedData } from './seed';
 import {
   CANONICAL_RECIPES,
+  CANONICAL_SIMPLE_RECIPES,
   CANONICAL_SIZES,
+  UNIT_SIZE,
   ensureCanonicalCatalog,
 } from './productSizes';
 import { loadData, normalizeData } from './storage';
@@ -77,14 +79,31 @@ async function ensureCanonicalCatalogInCloud(): Promise<void> {
   const recipesById = new Map(catalog.recipes.map((r) => [r.id, r]));
   const sizesById = new Map(catalog.sizes.map((s) => [s.id, s]));
   for (const recipe of CANONICAL_RECIPES) {
+    const existing = recipesById.get(recipe.id);
     recipesById.set(recipe.id, {
       ...recipe,
       ingredients: [...recipe.ingredients],
+      imageUrl: existing?.imageUrl || recipe.imageUrl,
+      kind: 'bowl',
+    });
+  }
+  for (const recipe of CANONICAL_SIMPLE_RECIPES) {
+    const existing = recipesById.get(recipe.id);
+    recipesById.set(recipe.id, {
+      ...recipe,
+      ingredients: [...(existing?.ingredients ?? recipe.ingredients)],
+      imageUrl: existing?.imageUrl || recipe.imageUrl,
+      unitPrice:
+        existing?.unitPrice != null ? existing.unitPrice : recipe.unitPrice,
+      kind: 'simple',
+      name: existing?.name || recipe.name,
+      description: existing?.description ?? recipe.description,
     });
   }
   for (const size of CANONICAL_SIZES) {
     sizesById.set(size.id, { ...size });
   }
+  sizesById.set(UNIT_SIZE.id, { ...UNIT_SIZE });
 
   const batch = writeBatch(db);
   for (const recipe of recipesById.values()) {

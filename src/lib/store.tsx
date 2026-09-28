@@ -42,7 +42,7 @@ import {
 import { cloudLogin, cloudLogout, isCloudEnabled } from './firebase';
 import { isAuthenticated, loadData, saveData, setAuthenticated } from './storage';
 import { PASSWORD } from './seed';
-import { migrateCatalog } from './productSizes';
+import { migrateCatalog, UNIT_SIZE } from './productSizes';
 import {
   calcDiscount,
   calcSubtotal,
@@ -310,14 +310,19 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     async (s: Omit<BowlSize, 'id'>) => {
       const size: BowlSize = {
         ...s,
-        id: `size-${s.ml}`,
+        id:
+          s.ml === 0 || s.label === 'Ud.'
+            ? UNIT_SIZE.id
+            : `size-${s.ml}`,
       };
       if (cloudEnabled) await upsertSize(size);
       else
         setData((prev) => ({
           ...prev,
           sizes: [
-            ...prev.sizes.filter((item) => item.id !== size.id && item.ml !== size.ml),
+            ...prev.sizes.filter(
+              (item) => item.id !== size.id && !(size.ml > 0 && item.ml === size.ml),
+            ),
             size,
           ].sort((a, b) => a.ml - b.ml),
         }));
@@ -328,19 +333,22 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   const updateSize = useCallback(
     async (id: string, patch: Partial<BowlSize>) => {
+      const sizeIdFor = (size: BowlSize) =>
+        size.ml === 0 || size.label === 'Ud.' || id === UNIT_SIZE.id
+          ? UNIT_SIZE.id
+          : `size-${size.ml}`;
+
       if (cloudEnabled) {
         const current = data.sizes.find((s) => s.id === id);
         if (!current) return;
         const next = { ...current, ...patch };
-        // Si cambia ml, actualizar id canónico
         const canonical: BowlSize = {
           ...next,
-          id: `size-${next.ml}`,
+          id: sizeIdFor(next),
         };
         if (canonical.id !== id) {
           await upsertSize(canonical);
           await removeSize(id);
-          // Reasignar líneas al nuevo sizeId
           const lines = data.products.filter((p) => p.sizeId === id);
           for (const line of lines) {
             await upsertProduct({ ...line, sizeId: canonical.id });
@@ -354,7 +362,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         const current = prev.sizes.find((s) => s.id === id);
         if (!current) return prev;
         const next = { ...current, ...patch };
-        const canonical: BowlSize = { ...next, id: `size-${next.ml}` };
+        const canonical: BowlSize = { ...next, id: sizeIdFor(next) };
         return {
           ...prev,
           sizes: prev.sizes

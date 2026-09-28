@@ -23,13 +23,22 @@ export const CANONICAL_SIZES: BowlSize[] = [
   { id: 'size-500', ml: 500, price: 12 },
 ];
 
-/** Recetas fijas con imágenes y flujo de pedido. */
+/** Tamaño unitario para productos simples (agua, refresco…). */
+export const UNIT_SIZE: BowlSize = {
+  id: 'size-ud',
+  ml: 0,
+  price: 0,
+  label: 'Ud.',
+};
+
+/** Recetas fijas de bowls con imágenes y flujo de pedido. */
 export const CANONICAL_RECIPES: ProductRecipe[] = [
   {
     id: 'prod-dulcecita',
     name: 'La Dulcecita',
     description: 'Açaí con almendra crocanti, mango, arándanos y miel.',
     ingredients: ['Açaí', 'Almendra crocanti', 'Mango', 'Arándanos', 'Miel'],
+    kind: 'bowl',
   },
   {
     id: 'prod-tropicoqueta',
@@ -42,25 +51,65 @@ export const CANONICAL_RECIPES: ProductRecipe[] = [
       'Plátano',
       'Fresa',
     ],
+    kind: 'bowl',
   },
   {
     id: 'prod-lotus',
     name: 'La Lotus',
     description: 'Açaí con Lotus, caramelo, plátano y arándanos.',
     ingredients: ['Açaí', 'Lotus', 'Caramelo', 'Plátano', 'Arándanos'],
+    kind: 'bowl',
   },
   {
     id: 'prod-custom',
     name: 'Crea tu Açaí',
     description: 'Elige 1 topping sólido, 1 topping blando y 2 frutas.',
     ingredients: ['Açaí'],
+    kind: 'bowl',
   },
 ];
+
+/** Bebidas / productos simples (sin builder de toppings). */
+export const CANONICAL_SIMPLE_RECIPES: ProductRecipe[] = [
+  {
+    id: 'prod-agua',
+    name: 'Agua',
+    description: 'Botella de agua',
+    ingredients: [],
+    kind: 'simple',
+    unitPrice: 2,
+  },
+  {
+    id: 'prod-refresco',
+    name: 'Refresco',
+    description: 'Refresco',
+    ingredients: [],
+    kind: 'simple',
+    unitPrice: 2.5,
+  },
+];
+
+export function isSimpleRecipe(
+  recipe: Pick<ProductRecipe, 'kind' | 'id' | 'name'> | null | undefined,
+): boolean {
+  if (!recipe) return false;
+  if (recipe.kind === 'simple') return true;
+  if (recipe.kind === 'bowl') return false;
+  const key = (recipe.name || '').trim().toLowerCase();
+  return key === 'agua' || key === 'refresco';
+}
+
+export function formatSizeLabel(size: Pick<BowlSize, 'ml' | 'label'>): string {
+  if (size.label) return size.label;
+  if (!size.ml) return 'Ud.';
+  return `${size.ml} ml`;
+}
 
 export interface ProductGroup {
   name: string;
   recipeId: string;
   variants: ResolvedProduct[];
+  kind: 'bowl' | 'simple';
 }
 
 export function resolveLine(
@@ -71,6 +120,7 @@ export function resolveLine(
   const recipe = recipes.find((item) => item.id === line.recipeId);
   const size = sizes.find((item) => item.id === line.sizeId);
   if (!recipe || !size) return null;
+  const simple = isSimpleRecipe(recipe);
   return {
     id: line.id,
     recipeId: recipe.id,
@@ -78,8 +128,13 @@ export function resolveLine(
     name: recipe.name,
     description: recipe.description || '',
     ingredients: recipe.ingredients || [],
-    size: Number(size.ml) || DEFAULT_BOWL_SIZE,
-    price: Number(size.price) || 0,
+    size: simple ? 0 : Number(size.ml) || DEFAULT_BOWL_SIZE,
+    price: simple
+      ? Number(recipe.unitPrice) || Number(size.price) || 0
+      : Number(size.price) || 0,
+    kind: simple ? 'simple' : 'bowl',
+    imageUrl: recipe.imageUrl,
+    sizeLabel: formatSizeLabel(size),
   };
 }
 
@@ -92,6 +147,10 @@ export function resolveAllProducts(
     .map((line) => resolveLine(line, recipes, sizes))
     .filter((item): item is ResolvedProduct => item != null)
     .sort((a, b) => {
+      // Bowls primero, bebidas/simples después
+      const kindRank = (k: ResolvedProduct['kind']) => (k === 'simple' ? 1 : 0);
+      const byKind = kindRank(a.kind) - kindRank(b.kind);
+      if (byKind !== 0) return byKind;
       const byName = a.name.localeCompare(b.name, 'es');
       if (byName !== 0) return byName;
       return a.size - b.size;
@@ -108,14 +167,22 @@ export function groupProductsByName(
     list.push(product);
     map.set(key, list);
   }
-  return [...map.entries()].map(([, variants]) => {
-    const sorted = [...variants].sort((a, b) => a.size - b.size);
-    return {
-      name: sorted[0].name,
-      recipeId: sorted[0].recipeId,
-      variants: sorted,
-    };
-  });
+  return [...map.entries()]
+    .map(([, variants]) => {
+      const sorted = [...variants].sort((a, b) => a.size - b.size);
+      return {
+        name: sorted[0].name,
+        recipeId: sorted[0].recipeId,
+        variants: sorted,
+        kind: sorted[0].kind,
+      };
+    })
+    .sort((a, b) => {
+      const kindRank = (k: ResolvedProduct['kind']) => (k === 'simple' ? 1 : 0);
+      const byKind = kindRank(a.kind) - kindRank(b.kind);
+      if (byKind !== 0) return byKind;
+      return a.name.localeCompare(b.name, 'es');
+    });
 }
 
 export function defaultVariant(variants: ResolvedProduct[]): ResolvedProduct {
@@ -228,16 +295,38 @@ export function ensureCanonicalCatalog(input: {
   );
 
   for (const recipe of CANONICAL_RECIPES) {
-    // Restaurar siempre los 4 bowls canónicos (nombre, ingredientes, ids)
+    const existing = recipes.get(recipe.id);
     recipes.set(recipe.id, {
       ...recipe,
       ingredients: [...recipe.ingredients],
+      // Conservar imagen subida por el usuario
+      imageUrl: existing?.imageUrl || recipe.imageUrl,
+      kind: 'bowl',
+    });
+  }
+
+  for (const recipe of CANONICAL_SIMPLE_RECIPES) {
+    const existing = recipes.get(recipe.id);
+    recipes.set(recipe.id, {
+      ...recipe,
+      ingredients: [...(existing?.ingredients ?? recipe.ingredients)],
+      imageUrl: existing?.imageUrl || recipe.imageUrl,
+      unitPrice:
+        existing?.unitPrice != null ? existing.unitPrice : recipe.unitPrice,
+      kind: 'simple',
+      name: existing?.name || recipe.name,
+      description: existing?.description ?? recipe.description,
     });
   }
 
   for (const size of CANONICAL_SIZES) {
     sizes.set(size.id, { ...size });
   }
+  const existingUnit = sizes.get(UNIT_SIZE.id);
+  sizes.set(UNIT_SIZE.id, {
+    ...UNIT_SIZE,
+    label: existingUnit?.label || UNIT_SIZE.label,
+  });
 
   for (const recipe of CANONICAL_RECIPES) {
     for (const size of CANONICAL_SIZES) {
@@ -252,9 +341,24 @@ export function ensureCanonicalCatalog(input: {
     }
   }
 
+  for (const recipe of CANONICAL_SIMPLE_RECIPES) {
+    const lineId = `${recipe.id}-ud`;
+    if (!products.has(lineId)) {
+      products.set(lineId, {
+        id: lineId,
+        recipeId: recipe.id,
+        sizeId: UNIT_SIZE.id,
+      });
+    }
+  }
+
   return {
     recipes: [...recipes.values()],
-    sizes: [...sizes.values()].sort((a, b) => a.ml - b.ml),
+    sizes: [...sizes.values()].sort((a, b) => {
+      if (a.ml === 0 && b.ml !== 0) return 1;
+      if (b.ml === 0 && a.ml !== 0) return -1;
+      return a.ml - b.ml;
+    }),
     products: [...products.values()],
   };
 }

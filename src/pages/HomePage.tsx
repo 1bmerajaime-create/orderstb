@@ -22,8 +22,11 @@ import {
 } from "../lib/utils";
 import {
   DEFAULT_BOWL_SIZE,
+  formatSizeLabel,
   resolveAllProducts,
+  UNIT_SIZE,
 } from "../lib/productSizes";
+import { compressImageFile, productImageUrl } from "../lib/productImages";
 import { FRUITS, SOFT_TOPPINGS } from "../lib/bowl";
 import type {
   BowlSize,
@@ -486,23 +489,24 @@ export function HomePage() {
                     <tr key={p.id}>
                       <td>
                         <strong>{p.name}</strong>
-                        {p.description && (
-                          <div
-                            style={{
-                              color: "var(--ink-soft)",
-                              fontSize: "0.8rem",
-                              marginTop: 4,
-                            }}
-                          >
-                            {p.description}
-                          </div>
-                        )}
+                        <div
+                          style={{
+                            color: "var(--ink-soft)",
+                            fontSize: "0.8rem",
+                            marginTop: 4,
+                          }}
+                        >
+                          {p.kind === "simple" ? "Sin toppings" : "Bowl · toppings"}
+                          {p.description ? ` · ${p.description}` : ""}
+                        </div>
                       </td>
-                      <td>{p.size ? `${p.size} ml` : "—"}</td>
+                      <td>{p.sizeLabel || (p.size ? `${p.size} ml` : "Ud.")}</td>
                       <td>
-                        {p.ingredients
-                          .filter((i) => !/^aça[ií]/i.test(i))
-                          .join(", ") || "—"}
+                        {p.kind === "simple"
+                          ? "—"
+                          : p.ingredients
+                              .filter((i) => !/^aça[ií]/i.test(i))
+                              .join(", ") || "—"}
                       </td>
                       <td>{formatEUR(p.price)}</td>
                       <td>
@@ -528,7 +532,11 @@ export function HomePage() {
                             onClick={() => {
                               if (
                                 confirm(
-                                  `¿Eliminar línea “${p.name} · ${p.size} ml”?`,
+                                  `¿Eliminar línea “${p.name}${
+                                    p.sizeLabel || p.size
+                                      ? ` · ${p.sizeLabel || `${p.size} ml`}`
+                                      : ""
+                                  }”?`,
                                 )
                               )
                                 deleteProduct(p.id);
@@ -832,7 +840,7 @@ export function HomePage() {
           onDelete={async (size) => {
             if (
               confirm(
-                `¿Eliminar tamaño ${size.ml} ml y sus líneas?`,
+                `¿Eliminar tamaño ${formatSizeLabel(size)} y sus líneas?`,
               )
             ) {
               await deleteSize(size.id);
@@ -853,8 +861,53 @@ export function HomePage() {
           onSave={async (payload) => {
             if (catalogModal.initial) {
               await updateRecipe(catalogModal.initial.id, payload);
+              // Si pasa a simple y no tiene línea unitaria, crearla
+              if (payload.kind === "simple") {
+                const hasUnitLine = data.products.some(
+                  (p) =>
+                    p.recipeId === catalogModal.initial!.id &&
+                    p.sizeId === UNIT_SIZE.id,
+                );
+                if (!hasUnitLine) {
+                  if (!data.sizes.some((s) => s.id === UNIT_SIZE.id)) {
+                    await addSize({
+                      ml: UNIT_SIZE.ml,
+                      price: UNIT_SIZE.price,
+                      label: UNIT_SIZE.label,
+                    });
+                  }
+                  await addProduct({
+                    recipeId: catalogModal.initial.id,
+                    sizeId: UNIT_SIZE.id,
+                  });
+                }
+              }
             } else {
-              await addRecipe(payload);
+              const recipe = await addRecipe(payload);
+              if (payload.kind === "simple") {
+                if (!data.sizes.some((s) => s.id === UNIT_SIZE.id)) {
+                  await addSize({
+                    ml: UNIT_SIZE.ml,
+                    price: UNIT_SIZE.price,
+                    label: UNIT_SIZE.label,
+                  });
+                }
+                await addProduct({
+                  recipeId: recipe.id,
+                  sizeId: UNIT_SIZE.id,
+                });
+              } else {
+                // Bowl: crear líneas con los tamaños de bowl existentes
+                const bowlSizes = data.sizes.filter(
+                  (s) => s.id !== UNIT_SIZE.id && s.ml > 0,
+                );
+                for (const size of bowlSizes) {
+                  await addProduct({
+                    recipeId: recipe.id,
+                    sizeId: size.id,
+                  });
+                }
+              }
             }
             setCatalogModal(
               catalogModal.fromList ? { type: "recipes-list" } : null,
@@ -1132,9 +1185,21 @@ function RecipesListModal({
               <div>
                 <strong>{recipe.name}</strong>
                 <div className="catalog-list-meta">
-                  {recipe.ingredients
-                    .filter((item) => !/^aça[ií]$/i.test(item))
-                    .join(" · ") || "Sin toppings/frutas"}
+                  {recipe.kind === "simple"
+                    ? `Sin toppings${
+                        recipe.unitPrice != null
+                          ? ` · ${formatEUR(recipe.unitPrice)}`
+                          : ""
+                      }`
+                    : `Bowl · toppings${
+                        recipe.ingredients.filter(
+                          (item) => !/^aça[ií]$/i.test(item),
+                        ).length
+                          ? ` · ${recipe.ingredients
+                              .filter((item) => !/^aça[ií]$/i.test(item))
+                              .join(" · ")}`
+                          : ""
+                      }`}
                 </div>
               </div>
               <div className="catalog-list-actions">
@@ -1193,7 +1258,7 @@ function SizesListModal({
           {sizes.map((size) => (
             <div key={size.id} className="catalog-list-row">
               <div>
-                <strong>{size.ml} ml</strong>
+                <strong>{formatSizeLabel(size)}</strong>
                 <div className="catalog-list-meta">{formatEUR(size.price)}</div>
               </div>
               <div className="catalog-list-actions">
@@ -1245,19 +1310,30 @@ function RecipeFormModal({
 }) {
   const [name, setName] = useState(initial?.name || "");
   const [description, setDescription] = useState(initial?.description || "");
+  const [kind, setKind] = useState<"bowl" | "simple">(
+    initial?.kind === "simple" ? "simple" : "bowl",
+  );
+  const [unitPrice, setUnitPrice] = useState(
+    String(initial?.unitPrice ?? (initial?.kind === "simple" ? 2 : "")),
+  );
+  const [imageUrl, setImageUrl] = useState(initial?.imageUrl || "");
+  const [imageBusy, setImageBusy] = useState(false);
+  const [imageError, setImageError] = useState("");
   const initialPicks = (initial?.ingredients || []).filter(
     (item) => !/^aça[ií]$/i.test(item) && !/^aça[ií] base$/i.test(item),
   );
   const [selected, setSelected] = useState<string[]>(initialPicks);
 
+  const previewImage = productImageUrl(initial?.id, name, imageUrl || undefined);
+
   const ingredientGroups = useMemo(() => {
     const usable = materials.filter((m) => {
-      const kind = m.kind as string;
+      const kindValue = m.kind as string;
       return (
-        kind === "fruta" ||
-        kind === "topping_duro" ||
-        kind === "topping_blando" ||
-        kind === "topping"
+        kindValue === "fruta" ||
+        kindValue === "topping_duro" ||
+        kindValue === "topping_blando" ||
+        kindValue === "topping"
       );
     });
 
@@ -1302,6 +1378,22 @@ function RecipeFormModal({
     );
   }
 
+  async function onPickImage(file: File | null) {
+    if (!file) return;
+    setImageBusy(true);
+    setImageError("");
+    try {
+      const dataUrl = await compressImageFile(file);
+      setImageUrl(dataUrl);
+    } catch (error) {
+      setImageError(
+        error instanceof Error ? error.message : "No se pudo cargar la imagen",
+      );
+    } finally {
+      setImageBusy(false);
+    }
+  }
+
   function renderPillGroup(title: string, items: Material[]) {
     if (items.length === 0) return null;
     return (
@@ -1335,11 +1427,16 @@ function RecipeFormModal({
       <form
         onSubmit={(e) => {
           e.preventDefault();
-          const ingredients = ["Açaí", ...selected];
+          const ingredients =
+            kind === "simple" ? [] : ["Açaí", ...selected];
           onSave({
             name: name.trim(),
             description: description.trim(),
             ingredients,
+            kind,
+            imageUrl: imageUrl || undefined,
+            unitPrice:
+              kind === "simple" ? Number(unitPrice) || 0 : undefined,
           });
         }}
       >
@@ -1352,29 +1449,104 @@ function RecipeFormModal({
           />
         </div>
         <div className="field">
+          <label>¿Lleva toppings?</label>
+          <p className="muted-note" style={{ marginBottom: "0.55rem" }}>
+            Define cómo se comporta al crear el pedido.
+          </p>
+          <div className="catalog-kind-toggle" role="group" aria-label="Tipo de producto">
+            <button
+              type="button"
+              className={`catalog-kind-option${kind === "bowl" ? " active" : ""}`}
+              aria-pressed={kind === "bowl"}
+              onClick={() => setKind("bowl")}
+            >
+              <strong>Sí · Bowl</strong>
+              <span>Al pedir se elige tamaño y toppings</span>
+            </button>
+            <button
+              type="button"
+              className={`catalog-kind-option${kind === "simple" ? " active" : ""}`}
+              aria-pressed={kind === "simple"}
+              onClick={() => setKind("simple")}
+            >
+              <strong>No · Otro producto</strong>
+              <span>Al pedir se añade directo (agua, refresco…)</span>
+            </button>
+          </div>
+        </div>
+        <div className="field">
+          <label>Imagen del producto</label>
+          <p className="muted-note" style={{ marginBottom: "0.65rem" }}>
+            Se muestra al crear el pedido.
+          </p>
+          <div className="recipe-image-row">
+            <span
+              className="recipe-image-preview"
+              style={{ backgroundImage: `url(${previewImage})` }}
+              aria-hidden
+            />
+            <div className="recipe-image-actions">
+              <label className="btn btn-ghost btn-sm">
+                {imageBusy ? "Procesando…" : "Adjuntar imagen"}
+                <input
+                  type="file"
+                  accept="image/*"
+                  hidden
+                  disabled={imageBusy}
+                  onChange={(e) => onPickImage(e.target.files?.[0] || null)}
+                />
+              </label>
+              {imageUrl && (
+                <button
+                  type="button"
+                  className="btn btn-ghost btn-sm"
+                  onClick={() => setImageUrl("")}
+                >
+                  Quitar
+                </button>
+              )}
+            </div>
+          </div>
+          {imageError && <p className="builder-status">{imageError}</p>}
+        </div>
+        <div className="field">
           <label>Descripción (opcional)</label>
           <textarea
             value={description}
             onChange={(e) => setDescription(e.target.value)}
           />
         </div>
-        <div className="field">
-          <label>Ingredientes</label>
-          <p className="muted-note" style={{ marginBottom: "0.65rem" }}>
-            Elige de la materia prima por categoría.
-          </p>
-          <div className="ingredient-groups">
-            {renderPillGroup("Fruta", ingredientGroups.fruits)}
-            {renderPillGroup("Topping duro", ingredientGroups.hard)}
-            {renderPillGroup("Topping blando", ingredientGroups.soft)}
+        {kind === "simple" ? (
+          <div className="field">
+            <label>Precio (€)</label>
+            <input
+              type="number"
+              min="0"
+              step="0.1"
+              value={unitPrice}
+              onChange={(e) => setUnitPrice(e.target.value)}
+              required
+            />
           </div>
-          {ingredientGroups.total === 0 && (
-            <p className="muted-note">
-              No hay materias de tipo fruta o topping. Añádelas en Materia
-              prima.
+        ) : (
+          <div className="field">
+            <label>Ingredientes base (opcional)</label>
+            <p className="muted-note" style={{ marginBottom: "0.65rem" }}>
+              Receta por defecto del bowl. En el pedido se podrán cambiar.
             </p>
-          )}
-        </div>
+            <div className="ingredient-groups">
+              {renderPillGroup("Fruta", ingredientGroups.fruits)}
+              {renderPillGroup("Topping duro", ingredientGroups.hard)}
+              {renderPillGroup("Topping blando", ingredientGroups.soft)}
+            </div>
+            {ingredientGroups.total === 0 && (
+              <p className="muted-note">
+                No hay materias de tipo fruta o topping. Añádelas en Materia
+                prima.
+              </p>
+            )}
+          </div>
+        )}
         <div className="modal-actions">
           {onDelete && (
             <button
@@ -1391,7 +1563,7 @@ function RecipeFormModal({
           <button
             type="submit"
             className="btn btn-primary"
-            disabled={!name.trim()}
+            disabled={!name.trim() || imageBusy}
           >
             Guardar
           </button>
@@ -1582,7 +1754,7 @@ function LineFormModal({
               </option>
               {sortedSizes.map((size) => (
                 <option key={size.id} value={size.id}>
-                  {size.ml} ml · {formatEUR(size.price)}
+                  {formatSizeLabel(size)} · {formatEUR(size.price)}
                 </option>
               ))}
             </select>

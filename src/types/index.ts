@@ -40,6 +40,15 @@ export interface ProductRecipe {
   name: string;
   description?: string;
   ingredients: string[];
+  /**
+   * bowl = açaí configurable; simple = se añade directo al pedido (agua, refresco…).
+   * Por defecto: bowl.
+   */
+  kind?: 'bowl' | 'simple';
+  /** Imagen del producto (data URL o ruta) para el picker de pedido. */
+  imageUrl?: string;
+  /** Precio unitario cuando kind=simple. */
+  unitPrice?: number;
 }
 
 /** Tamaño global: ml + precio (afecta a todas las líneas con ese ml). */
@@ -47,6 +56,8 @@ export interface BowlSize {
   id: string;
   ml: number;
   price: number;
+  /** Etiqueta opcional (p. ej. "Ud." para productos simples). */
+  label?: string;
 }
 
 /** Línea de catálogo vendible = receta × tamaño. */
@@ -66,6 +77,9 @@ export interface ResolvedProduct {
   ingredients: string[];
   size: number;
   price: number;
+  kind: 'bowl' | 'simple';
+  imageUrl?: string;
+  sizeLabel?: string;
 }
 
 export interface Material {

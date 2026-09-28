@@ -55,6 +55,8 @@ interface DraftBowl extends BowlConfig {
   size: number;
   basePrice: number;
   baseRecipe: BowlConfig;
+  kind: 'bowl' | 'simple';
+  imageUrl?: string;
   promotionId?: string;
   discountType: LineDiscountType;
   discountValue: number;
@@ -99,6 +101,7 @@ export function NewOrderPage() {
           bowl.discountValue,
         );
         const promo = data.promotions.find((p) => p.id === bowl.promotionId);
+        const simple = bowl.kind === 'simple';
         return {
           productId: bowl.productId,
           productName: bowl.productName,
@@ -108,10 +111,12 @@ export function NewOrderPage() {
           lineDiscount: discount,
           promotionId: bowl.promotionId,
           promotionName: promo?.name,
-          ingredients: bowlIngredients(config),
+          ingredients: simple ? [] : bowlIngredients(config),
           customized:
-            !isCustomProduct(bowl.productId) && isCustomized(bowl),
-          size: bowl.size,
+            !simple &&
+            !isCustomProduct(bowl.productId) &&
+            isCustomized(bowl),
+          size: simple ? undefined : bowl.size,
         };
       }),
     [bowls, data.promotions],
@@ -139,22 +144,27 @@ export function NewOrderPage() {
   const total = subtotal;
   const allComplete =
     bowls.length > 0 &&
-    bowls.every((bowl) =>
-      isBowlComplete({
-        solids: bowl.solids,
-        softs: bowl.softs,
-        fruits: bowl.fruits,
-        whey: bowl.whey,
-      }),
+    bowls.every(
+      (bowl) =>
+        bowl.kind === 'simple' ||
+        isBowlComplete({
+          solids: bowl.solids,
+          softs: bowl.softs,
+          fruits: bowl.fruits,
+          whey: bowl.whey,
+        }),
     );
 
   if (!event) return <Navigate to="/" replace />;
 
   function makeBowl(product: ResolvedProduct): DraftBowl {
-    const recipe = isCustomProduct(product)
+    const simple = product.kind === 'simple';
+    const recipe = simple
       ? { solids: [], softs: [], fruits: [], whey: false }
-      : parseRecipe(product.ingredients);
-    const size = productSizeMl(product);
+      : isCustomProduct(product)
+        ? { solids: [], softs: [], fruits: [], whey: false }
+        : parseRecipe(product.ingredients);
+    const size = simple ? 0 : productSizeMl(product);
     return {
       id: uid('bowl'),
       productId: product.id,
@@ -171,6 +181,8 @@ export function NewOrderPage() {
       softs: [...recipe.softs],
       fruits: [...recipe.fruits],
       whey: recipe.whey,
+      kind: simple ? 'simple' : 'bowl',
+      imageUrl: product.imageUrl,
       promotionId: undefined,
       discountType: 'none',
       discountValue: 0,
@@ -178,7 +190,12 @@ export function NewOrderPage() {
   }
 
   function startNewBowlFromGroup(variants: ResolvedProduct[]) {
-    setDraft({ bowl: makeBowl(defaultVariant(variants)), mode: 'new' });
+    const product = defaultVariant(variants);
+    if (product.kind === 'simple') {
+      setBowls((current) => [...current, makeBowl(product)]);
+      return;
+    }
+    setDraft({ bowl: makeBowl(product), mode: 'new' });
   }
 
   function startEditBowl(bowl: DraftBowl) {
@@ -308,7 +325,7 @@ export function NewOrderPage() {
               />
             </div>
 
-            <p className="order-modal-label">Elige tu açaí</p>
+            <p className="order-modal-label">Elige productos</p>
             <div className="product-picker product-picker-visual">
               {productGroups.map((group) => {
                 const representative = defaultVariant(group.variants);
@@ -318,8 +335,10 @@ export function NewOrderPage() {
                 const image = productImageUrl(
                   representative.id,
                   representative.name,
+                  representative.imageUrl,
                 );
                 const isCustom = isCustomProduct(representative);
+                const isSimple = representative.kind === 'simple';
                 return (
                   <button
                     key={group.name}
@@ -336,11 +355,19 @@ export function NewOrderPage() {
                     </span>
                     <span className="picker-card-body">
                       <span className="picker-card-name">{group.name}</span>
-                      {count > 0 && (
-                        <span className="picker-card-meta">
-                          <span className="picker-chip-count">{count}</span>
+                      <span className="picker-card-meta">
+                        <span
+                          className={`picker-kind-badge${isSimple ? ' simple' : ''}`}
+                        >
+                          {isSimple ? 'Directo' : 'Bowl'}
                         </span>
-                      )}
+                        {isSimple && (
+                          <span>{formatEUR(representative.price)}</span>
+                        )}
+                        {count > 0 && (
+                          <span className="picker-chip-count">{count}</span>
+                        )}
+                      </span>
                     </span>
                     <Plus size={16} className="picker-card-plus" aria-hidden />
                   </button>
@@ -352,12 +379,12 @@ export function NewOrderPage() {
           <aside className="order-page-cart">
             <div className="cart-head">
               <h2>Pedido</h2>
-              <span>{bowls.length} bowls</span>
+              <span>{bowls.length} ítems</span>
             </div>
 
             {bowls.length === 0 ? (
               <div className="empty cart-empty">
-                <strong>Sin bowls</strong>
+                <strong>Sin productos</strong>
                 Toca un producto para añadirlo.
               </div>
             ) : (
@@ -375,20 +402,25 @@ export function NewOrderPage() {
                     bowl.discountType,
                     bowl.discountValue,
                   );
+                  const simple = bowl.kind === 'simple';
                   return (
                     <CartItem
                       key={bowl.id}
-                      onEdit={() => startEditBowl(bowl)}
+                      onEdit={
+                        simple ? undefined : () => startEditBowl(bowl)
+                      }
                     >
                       <span className="cart-item-index">{index + 1}</span>
                       <div className="cart-item-body">
                         <div className="cart-item-title">
                           <strong>
                             {bowl.productName}
-                            <span className="cart-item-size">
-                              {' '}
-                              · {bowl.size} ml
-                            </span>
+                            {!simple && (
+                              <span className="cart-item-size">
+                                {' '}
+                                · {bowl.size} ml
+                              </span>
+                            )}
                           </strong>
                           <span>{formatEUR(net)}</span>
                         </div>
@@ -400,8 +432,10 @@ export function NewOrderPage() {
                           </span>
                         )}
                         <p>
-                          {bowlIngredients(config).slice(1).join(' · ') ||
-                            'Configura el bowl'}
+                          {simple
+                            ? 'Listo'
+                            : bowlIngredients(config).slice(1).join(' · ') ||
+                              'Configura el bowl'}
                         </p>
                       </div>
                       <div className="cart-item-actions">
@@ -539,7 +573,11 @@ function BowlConfigModal({
     bowl.discountValue,
   );
   const selectedPromo = promotions.find((p) => p.id === bowl.promotionId);
-  const heroImage = productImageUrl(bowl.productId, bowl.productName);
+  const heroImage = productImageUrl(
+    bowl.productId,
+    bowl.productName,
+    bowl.imageUrl,
+  );
   const sizeVariants =
     variants.length > 0
       ? variants
@@ -830,8 +868,11 @@ function CartItem({
   onEdit,
 }: {
   children: ReactNode;
-  onEdit: () => void;
+  onEdit?: () => void;
 }) {
+  if (!onEdit) {
+    return <div className="cart-item">{children}</div>;
+  }
   return (
     <div
       className="cart-item cart-item-clickable"
