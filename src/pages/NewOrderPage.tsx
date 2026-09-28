@@ -591,6 +591,7 @@ function BowlConfigModal({
             ingredients: [],
             price: bowl.basePrice,
             size: bowl.size || DEFAULT_BOWL_SIZE,
+            kind: 'bowl',
           } satisfies ResolvedProduct,
         ];
 
