@@ -3036,7 +3036,8 @@ tbody tr.row-clickable:hover td {
   word-break: break-word;
 }
 
-@media (min-width: 900px) {
+/* iPad y pantallas medianas/grandes: toppings y nombre más legibles */
+@media (min-width: 700px) {
   .bowl-table-prep .bowl-table-row-visual {
     gap: 1.05rem;
     padding: 1.15rem 1.3rem;
