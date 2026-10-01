@@ -1,6 +1,12 @@
 import { initializeApp, type FirebaseApp } from 'firebase/app';
 import { getAuth, signInAnonymously, signOut, type Auth } from 'firebase/auth';
-import { getFirestore, type Firestore } from 'firebase/firestore';
+import {
+  getFirestore,
+  initializeFirestore,
+  persistentLocalCache,
+  persistentMultipleTabManager,
+  type Firestore,
+} from 'firebase/firestore';
 
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY as string | undefined,
@@ -26,33 +32,47 @@ let app: FirebaseApp | null = null;
 let auth: Auth | null = null;
 let db: Firestore | null = null;
 
-export function getFirebaseAuth(): Auth {
+function ensureApp(): FirebaseApp {
   if (!isCloudEnabled) {
     throw new Error('Firebase no está configurado');
   }
   if (!app) {
     app = initializeApp(firebaseConfig);
     auth = getAuth(app);
-    db = getFirestore(app);
+    try {
+      db = initializeFirestore(app, {
+        localCache: persistentLocalCache({
+          tabManager: persistentMultipleTabManager(),
+        }),
+      });
+    } catch {
+      // Ya inicializado (HMR / multi-import): reutilizar instancia.
+      db = getFirestore(app);
+    }
   }
+  return app;
+}
+
+export function getFirebaseAuth(): Auth {
+  ensureApp();
   return auth!;
 }
 
 export function getDb(): Firestore {
-  getFirebaseAuth();
+  ensureApp();
   return db!;
 }
 
 export async function cloudLogin(): Promise<void> {
   if (!isCloudEnabled) return;
+  const firebaseAuth = getFirebaseAuth();
+  if (firebaseAuth.currentUser) return;
   try {
-    const firebaseAuth = getFirebaseAuth();
-    if (!firebaseAuth.currentUser) {
-      await signInAnonymously(firebaseAuth);
-    }
-  } catch {
-    // Auth aún no provisionado en el proyecto: Firestore puede usarse igual
-    // si las reglas lo permiten. La UI sigue protegida por la contraseña de la app.
+    await signInAnonymously(firebaseAuth);
+  } catch (error) {
+    // Si Anonymous no está activado y las reglas están abiertas, Firestore sigue
+    // funcionando. Con reglas auth-only el sync fallará con permission-denied.
+    console.warn('Anonymous Auth no disponible:', error);
   }
 }
 

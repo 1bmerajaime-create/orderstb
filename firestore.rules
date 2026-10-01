@@ -1,9 +1,11 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // App interna Tropic Boost. La contraseña de la app filtra el uso normal.
-    // Para endurecer: activa Authentication → Anonymous en la consola y cambia a:
-    // allow read, write: if request.auth != null;
+    // TEMPORAL para el evento: acceso abierto (la app filtra con contraseña).
+    // ANTES de endurecer, verifica en Firebase Console:
+    //   Authentication → Sign-in method → Anonymous → Enable
+    // Luego cambia a: allow read, write: if request.auth != null;
+    // y despliega: npx firebase deploy --only firestore:rules
     match /{document=**} {
       allow read, write: if true;
     }

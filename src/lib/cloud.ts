@@ -4,6 +4,7 @@ import {
   getDocs,
   onSnapshot,
   setDoc,
+  updateDoc,
   deleteDoc,
   writeBatch,
   runTransaction,
@@ -30,6 +31,17 @@ import {
 } from './productSizes';
 import { loadData, normalizeData } from './storage';
 
+const SYNC_COLLECTIONS = [
+  'events',
+  'products',
+  'recipes',
+  'sizes',
+  'materials',
+  'promotions',
+  'orders',
+  'counters',
+] as const;
+
 const COLLECTIONS = {
   events: 'events',
   products: 'products',
@@ -51,14 +63,21 @@ async function collectionEmpty(name: string): Promise<boolean> {
   return snap.empty;
 }
 
-/** Escribe en Firestore recetas/tamaños/líneas canónicas si faltan. */
-async function ensureCanonicalCatalogInCloud(): Promise<void> {
+/**
+ * Solo añade piezas canónicas que no existan. No reescribe catálogo
+ * ya personalizado (evita resetear ingredientes en cada login).
+ */
+async function ensureMissingCanonicalOnly(): Promise<void> {
   const db = getDb();
   const [recipesSnap, sizesSnap, productsSnap] = await Promise.all([
     getDocs(collection(db, COLLECTIONS.recipes)),
     getDocs(collection(db, COLLECTIONS.sizes)),
     getDocs(collection(db, COLLECTIONS.products)),
   ]);
+
+  const existingRecipeIds = new Set(recipesSnap.docs.map((d) => d.id));
+  const existingSizeIds = new Set(sizesSnap.docs.map((d) => d.id));
+  const existingProductIds = new Set(productsSnap.docs.map((d) => d.id));
 
   const catalog = ensureCanonicalCatalog({
     recipes: recipesSnap.docs.map((item) => ({
@@ -75,50 +94,29 @@ async function ensureCanonicalCatalogInCloud(): Promise<void> {
     })) as Product[],
   });
 
-  // Forzar recetas/tamaños canónicos con datos completos (nombre, ingredientes, precio)
-  const recipesById = new Map(catalog.recipes.map((r) => [r.id, r]));
-  const sizesById = new Map(catalog.sizes.map((s) => [s.id, s]));
-  for (const recipe of CANONICAL_RECIPES) {
-    const existing = recipesById.get(recipe.id);
-    recipesById.set(recipe.id, {
-      ...recipe,
-      ingredients: [...recipe.ingredients],
-      imageUrl: existing?.imageUrl || recipe.imageUrl,
-      kind: 'bowl',
-    });
-  }
-  for (const recipe of CANONICAL_SIMPLE_RECIPES) {
-    const existing = recipesById.get(recipe.id);
-    recipesById.set(recipe.id, {
-      ...recipe,
-      ingredients: [...(existing?.ingredients ?? recipe.ingredients)],
-      imageUrl: existing?.imageUrl || recipe.imageUrl,
-      unitPrice:
-        existing?.unitPrice != null ? existing.unitPrice : recipe.unitPrice,
-      kind: 'simple',
-      name: existing?.name || recipe.name,
-      description: existing?.description ?? recipe.description,
-    });
-  }
-  for (const size of CANONICAL_SIZES) {
-    sizesById.set(size.id, { ...size });
-  }
-  sizesById.set(UNIT_SIZE.id, { ...UNIT_SIZE });
-
   const batch = writeBatch(db);
-  for (const recipe of recipesById.values()) {
+  let writes = 0;
+
+  for (const recipe of [...CANONICAL_RECIPES, ...CANONICAL_SIMPLE_RECIPES]) {
+    if (existingRecipeIds.has(recipe.id)) continue;
     batch.set(doc(db, COLLECTIONS.recipes, recipe.id), stripUndefined(recipe));
+    writes += 1;
   }
-  for (const size of sizesById.values()) {
+  for (const size of [...CANONICAL_SIZES, UNIT_SIZE]) {
+    if (existingSizeIds.has(size.id)) continue;
     batch.set(doc(db, COLLECTIONS.sizes, size.id), stripUndefined(size));
+    writes += 1;
   }
   for (const product of catalog.products) {
+    if (existingProductIds.has(product.id)) continue;
     batch.set(
       doc(db, COLLECTIONS.products, product.id),
       stripUndefined(product),
     );
+    writes += 1;
   }
-  await batch.commit();
+
+  if (writes > 0) await batch.commit();
 }
 
 export async function ensureSeeded(): Promise<void> {
@@ -129,7 +127,7 @@ export async function ensureSeeded(): Promise<void> {
     (await collectionEmpty(COLLECTIONS.orders));
 
   if (!empty) {
-    await ensureCanonicalCatalogInCloud();
+    await ensureMissingCanonicalOnly();
     return;
   }
 
@@ -194,6 +192,7 @@ function docsToList<T extends { id: string }>(
 export function subscribeAppData(
   onData: (data: AppData) => void,
   onError?: (error: Error) => void,
+  onReady?: () => void,
 ): Unsubscribe {
   const db = getDb();
   let events: Event[] = [];
@@ -204,6 +203,9 @@ export function subscribeAppData(
   let promotions: Promotion[] = [];
   let orders: Order[] = [];
   let orderCounter: Record<string, number> = {};
+
+  const readyKeys = new Set<string>();
+  let readyEmitted = false;
 
   const emit = () => {
     onData(
@@ -220,12 +222,21 @@ export function subscribeAppData(
     );
   };
 
+  const markReady = (key: (typeof SYNC_COLLECTIONS)[number]) => {
+    readyKeys.add(key);
+    if (!readyEmitted && readyKeys.size >= SYNC_COLLECTIONS.length) {
+      readyEmitted = true;
+      onReady?.();
+    }
+  };
+
   const unsubs = [
     onSnapshot(
       collection(db, COLLECTIONS.events),
       (snap) => {
         events = docsToList<Event>(snap.docs);
         emit();
+        markReady('events');
       },
       (err) => onError?.(err),
     ),
@@ -234,6 +245,7 @@ export function subscribeAppData(
       (snap) => {
         products = docsToList<Product>(snap.docs);
         emit();
+        markReady('products');
       },
       (err) => onError?.(err),
     ),
@@ -242,6 +254,7 @@ export function subscribeAppData(
       (snap) => {
         recipes = docsToList<ProductRecipe>(snap.docs);
         emit();
+        markReady('recipes');
       },
       (err) => onError?.(err),
     ),
@@ -250,6 +263,7 @@ export function subscribeAppData(
       (snap) => {
         sizes = docsToList<BowlSize>(snap.docs);
         emit();
+        markReady('sizes');
       },
       (err) => onError?.(err),
     ),
@@ -258,6 +272,7 @@ export function subscribeAppData(
       (snap) => {
         materials = docsToList<Material>(snap.docs);
         emit();
+        markReady('materials');
       },
       (err) => onError?.(err),
     ),
@@ -266,6 +281,7 @@ export function subscribeAppData(
       (snap) => {
         promotions = docsToList<Promotion>(snap.docs);
         emit();
+        markReady('promotions');
       },
       (err) => onError?.(err),
     ),
@@ -274,6 +290,7 @@ export function subscribeAppData(
       (snap) => {
         orders = docsToList<Order>(snap.docs);
         emit();
+        markReady('orders');
       },
       (err) => onError?.(err),
     ),
@@ -285,6 +302,7 @@ export function subscribeAppData(
           orderCounter[item.id] = Number(item.data().value) || 0;
         });
         emit();
+        markReady('counters');
       },
       (err) => onError?.(err),
     ),
@@ -371,6 +389,17 @@ export async function upsertOrder(order: Order): Promise<void> {
   );
 }
 
+/** Actualiza solo los campos indicados (evita pisar ediciones concurrentes). */
+export async function patchOrder(
+  id: string,
+  patch: Partial<Order>,
+): Promise<void> {
+  await updateDoc(
+    doc(getDb(), COLLECTIONS.orders, id),
+    stripUndefined(patch) as Record<string, unknown>,
+  );
+}
+
 export async function createOrderAtomic(
   order: Omit<Order, 'number' | 'id'> & { id: string },
 ): Promise<Order> {
@@ -395,44 +424,10 @@ export async function createOrderAtomic(
   return created;
 }
 
-export async function removeOrderAndRenumber(
-  id: string,
-  currentOrders: Order[],
-): Promise<void> {
-  const db = getDb();
-  const removed = currentOrders.find((order) => order.id === id);
-  if (!removed) return;
-
-  const remaining = currentOrders.filter((order) => order.id !== id);
-  const eventOrders = remaining
-    .filter((order) => order.eventId === removed.eventId)
-    .sort(
-      (a, b) =>
-        new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
-    );
-
-  const batch = writeBatch(db);
-  batch.delete(doc(db, COLLECTIONS.orders, id));
-
-  eventOrders.forEach((order, index) => {
-    const number = index + 1;
-    const defaultCustomer = `Cliente #${order.number}`;
-    batch.set(
-      doc(db, COLLECTIONS.orders, order.id),
-      stripUndefined({
-        ...order,
-        number,
-        customerName:
-          order.customerName === defaultCustomer
-            ? `Cliente #${number}`
-            : order.customerName,
-      }),
-    );
-  });
-
-  batch.set(doc(db, COLLECTIONS.counters, removed.eventId), {
-    value: eventOrders.length,
-  });
-
-  await batch.commit();
+/**
+ * Borra el pedido sin renumerar. En servicio en vivo renumerar provoca
+ * números duplicados / contador incorrecto si hay altas concurrentes.
+ */
+export async function removeOrder(id: string): Promise<void> {
+  await deleteDoc(doc(getDb(), COLLECTIONS.orders, id));
 }

@@ -61,9 +61,9 @@ export function OrdersPage() {
       >
         <div className="order-card-head">
           <div>
-            <div className="order-num">#{order.number}</div>
+            <div className="order-num">{order.customerName}</div>
             <div className="order-meta">
-              {order.customerName} · {formatTime(order.createdAt)}
+              Pedido #{order.number} · {formatTime(order.createdAt)}
             </div>
           </div>
         </div>

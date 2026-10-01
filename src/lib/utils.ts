@@ -9,6 +9,7 @@ import type {
   Product,
   Promotion,
 } from '../types';
+import { isSimpleRecipe } from './productSizes';
 
 export function uid(prefix = 'id'): string {
   return `${prefix}-${crypto.randomUUID().slice(0, 8)}`;
@@ -242,6 +243,15 @@ export function eventKPIs(data: AppData, eventId: string) {
   /** Pedidos visibles en la pantalla Pedidos (En curso + Listos) */
   const boardOrders = [...inProgressOrders, ...readyOrders];
 
+  let bowlsSold = 0;
+  let drinksSold = 0;
+  orders.forEach((order) => {
+    order.lines.forEach((line) => {
+      if (isDrinkOrderLine(line, data)) drinksSold += line.quantity;
+      else bowlsSold += line.quantity;
+    });
+  });
+
   const productSales: Record<string, { name: string; qty: number; revenue: number }> =
     {};
   completed.forEach((o) => {
@@ -260,6 +270,8 @@ export function eventKPIs(data: AppData, eventId: string) {
 
   return {
     totalOrders: orders.length,
+    bowlsSold,
+    drinksSold,
     revenue,
     iva,
     base,
@@ -278,6 +290,17 @@ export function eventKPIs(data: AppData, eventId: string) {
     /** @deprecated alias de boardOrders para compatibilidad */
     activeOrders: boardOrders,
   };
+}
+
+function isDrinkOrderLine(line: OrderLine, data: AppData): boolean {
+  const catalog = data.products.find((p) => p.id === line.productId);
+  const recipe =
+    (catalog && data.recipes.find((r) => r.id === catalog.recipeId)) ||
+    data.recipes.find((r) => r.id === line.productId);
+  if (recipe) return isSimpleRecipe(recipe);
+  if (typeof line.size === 'number' && line.size > 0) return false;
+  const name = line.productName.trim().toLowerCase();
+  return name === 'agua' || name === 'refresco';
 }
 
 export function globalKPIs(data: AppData) {

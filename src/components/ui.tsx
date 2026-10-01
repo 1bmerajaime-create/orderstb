@@ -6,6 +6,7 @@ import logoHorizontalUrl from '../assets/logo-horizontal.png';
 
 export function Modal({
   title,
+  subtitle,
   children,
   onClose,
   wide,
@@ -16,6 +17,7 @@ export function Modal({
   footer,
 }: {
   title: string;
+  subtitle?: string;
   children: ReactNode;
   onClose: () => void;
   wide?: boolean;
@@ -60,7 +62,10 @@ export function Modal({
         aria-label={title}
       >
         <div className="modal-header">
-          <h3>{title}</h3>
+          <div className="modal-header-text">
+            <h3>{title}</h3>
+            {subtitle && <p className="modal-subtitle">{subtitle}</p>}
+          </div>
           <div className="modal-header-actions">
             {headerActions}
             <button className="icon-btn" onClick={onClose} aria-label="Cerrar">

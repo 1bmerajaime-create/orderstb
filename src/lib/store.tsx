@@ -23,9 +23,10 @@ import type {
 import {
   createOrderAtomic,
   ensureSeeded,
+  patchOrder,
   removeEvent,
   removeMaterial,
-  removeOrderAndRenumber,
+  removeOrder,
   removeProduct,
   removePromotion,
   removeRecipe,
@@ -33,7 +34,6 @@ import {
   subscribeAppData,
   upsertEvent,
   upsertMaterial,
-  upsertOrder,
   upsertProduct,
   upsertPromotion,
   upsertRecipe,
@@ -50,6 +50,8 @@ import {
   round2,
   uid,
 } from './utils';
+
+const SYNC_TIMEOUT_MS = 15000;
 
 function normalizeAppData(data: AppData): AppData {
   const catalog = migrateCatalog(data);
@@ -68,6 +70,8 @@ interface StoreContextValue {
   syncReady: boolean;
   syncError: string | null;
   cloudEnabled: boolean;
+  online: boolean;
+  retrySync: () => void;
   login: (password: string) => Promise<boolean>;
   logout: () => Promise<void>;
   // Events
@@ -132,11 +136,32 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [authenticated, setAuth] = useState(() => isAuthenticated());
   const [syncReady, setSyncReady] = useState(!cloudEnabled);
   const [syncError, setSyncError] = useState<string | null>(null);
+  const [syncAttempt, setSyncAttempt] = useState(0);
+  const [online, setOnline] = useState(
+    () => typeof navigator === 'undefined' || navigator.onLine,
+  );
+
+  useEffect(() => {
+    const onOnline = () => setOnline(true);
+    const onOffline = () => setOnline(false);
+    window.addEventListener('online', onOnline);
+    window.addEventListener('offline', onOffline);
+    return () => {
+      window.removeEventListener('online', onOnline);
+      window.removeEventListener('offline', onOffline);
+    };
+  }, []);
 
   // Persistencia local solo si no hay nube
   useEffect(() => {
     if (!cloudEnabled) saveData(data);
   }, [cloudEnabled, data]);
+
+  const retrySync = useCallback(() => {
+    setSyncError(null);
+    setSyncReady(false);
+    setSyncAttempt((n) => n + 1);
+  }, []);
 
   // Suscripción Firestore cuando hay sesión
   useEffect(() => {
@@ -147,44 +172,74 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
     let unsub: (() => void) | undefined;
     let cancelled = false;
+    let timedOut = false;
+
+    const timeoutId = window.setTimeout(() => {
+      if (cancelled) return;
+      timedOut = true;
+      setSyncError(
+        'La sincronización tarda demasiado. Revisa la conexión e inténtalo de nuevo.',
+      );
+      setSyncReady(false);
+    }, SYNC_TIMEOUT_MS);
 
     (async () => {
       try {
         await cloudLogin();
-        await ensureSeeded();
         if (cancelled) return;
+
+        // Listeners primero: la UI no espera al seed.
         unsub = subscribeAppData(
           (next) => {
+            if (cancelled) return;
             setData(normalizeAppData(next));
-            setSyncReady(true);
-            setSyncError(null);
           },
           (error) => {
+            if (cancelled) return;
             setSyncError(error.message);
             setSyncReady(false);
           },
+          () => {
+            if (cancelled || timedOut) return;
+            window.clearTimeout(timeoutId);
+            setSyncReady(true);
+            setSyncError(null);
+          },
         );
+
+        // Seed / piezas faltantes en segundo plano (no bloquea syncReady).
+        ensureSeeded().catch((error) => {
+          if (cancelled) return;
+          console.warn('ensureSeeded:', error);
+        });
       } catch (error) {
-        setSyncError(
-          error instanceof Error ? error.message : 'Error de sincronización',
-        );
+        if (cancelled) return;
+        window.clearTimeout(timeoutId);
+        const message =
+          error instanceof Error ? error.message : 'Error de sincronización';
+        const authHint = /auth|anonymous|permission/i.test(message)
+          ? ' Activa Authentication → Anonymous en Firebase Console.'
+          : '';
+        setSyncError(message + authHint);
         setSyncReady(false);
       }
     })();
 
     return () => {
       cancelled = true;
+      window.clearTimeout(timeoutId);
       unsub?.();
     };
-  }, [cloudEnabled, authenticated]);
+  }, [cloudEnabled, authenticated, syncAttempt]);
 
   const login = useCallback(async (password: string) => {
     if (password !== PASSWORD) return false;
     if (cloudEnabled) {
       try {
         await cloudLogin();
-      } catch {
-        return false;
+      } catch (error) {
+        // No bloquear el acceso a la app: el sync mostrará el error si hace falta.
+        console.warn('cloudLogin en login:', error);
       }
     }
     setAuthenticated(true);
@@ -199,6 +254,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     if (cloudEnabled) {
       setData(emptyData);
       setSyncReady(false);
+      setSyncError(null);
     }
   }, [cloudEnabled]);
 
@@ -633,18 +689,37 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       const current = data.orders.find((o) => o.id === id);
       if (!current) return;
       const now = new Date().toISOString();
-      const next: Order = {
-        ...current,
+      const patch: Partial<Order> = {
         status,
         updatedAt: now,
-        deliveredAt: status === 'entregado' ? now : current.deliveredAt,
+        ...(status === 'entregado' ? { deliveredAt: now } : {}),
       };
-      if (cloudEnabled) await upsertOrder(next);
-      else
+      if (cloudEnabled) {
+        // Optimistic UI
         setData((prev) => ({
           ...prev,
-          orders: prev.orders.map((o) => (o.id === id ? next : o)),
+          orders: prev.orders.map((o) =>
+            o.id === id ? { ...o, ...patch } : o,
+          ),
         }));
+        try {
+          await patchOrder(id, patch);
+        } catch (error) {
+          // Revertir si falla
+          setData((prev) => ({
+            ...prev,
+            orders: prev.orders.map((o) => (o.id === id ? current : o)),
+          }));
+          throw error;
+        }
+        return;
+      }
+      setData((prev) => ({
+        ...prev,
+        orders: prev.orders.map((o) =>
+          o.id === id ? { ...o, ...patch } : o,
+        ),
+      }));
     },
     [cloudEnabled, data.orders],
   );
@@ -653,18 +728,35 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     async (id: string, method: PaymentMethod) => {
       const current = data.orders.find((o) => o.id === id);
       if (!current) return;
-      const next: Order = {
-        ...current,
+      const patch: Partial<Order> = {
         paid: method !== 'pendiente',
         paymentMethod: method,
         updatedAt: new Date().toISOString(),
       };
-      if (cloudEnabled) await upsertOrder(next);
-      else
+      if (cloudEnabled) {
         setData((prev) => ({
           ...prev,
-          orders: prev.orders.map((o) => (o.id === id ? next : o)),
+          orders: prev.orders.map((o) =>
+            o.id === id ? { ...o, ...patch } : o,
+          ),
         }));
+        try {
+          await patchOrder(id, patch);
+        } catch (error) {
+          setData((prev) => ({
+            ...prev,
+            orders: prev.orders.map((o) => (o.id === id ? current : o)),
+          }));
+          throw error;
+        }
+        return;
+      }
+      setData((prev) => ({
+        ...prev,
+        orders: prev.orders.map((o) =>
+          o.id === id ? { ...o, ...patch } : o,
+        ),
+      }));
     },
     [cloudEnabled, data.orders],
   );
@@ -672,48 +764,15 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const deleteOrder = useCallback(
     async (id: string) => {
       if (cloudEnabled) {
-        await removeOrderAndRenumber(id, data.orders);
+        await removeOrder(id);
         return;
       }
-      setData((prev) => {
-        const removed = prev.orders.find((order) => order.id === id);
-        if (!removed) return prev;
-
-        const remaining = prev.orders.filter((order) => order.id !== id);
-        const eventOrders = remaining
-          .filter((order) => order.eventId === removed.eventId)
-          .sort(
-            (a, b) =>
-              new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
-          );
-        const numberById = new Map(
-          eventOrders.map((order, index) => [order.id, index + 1]),
-        );
-        const orders = remaining.map((order) => {
-          const number = numberById.get(order.id);
-          if (!number) return order;
-          const defaultCustomer = `Cliente #${order.number}`;
-          return {
-            ...order,
-            number,
-            customerName:
-              order.customerName === defaultCustomer
-                ? `Cliente #${number}`
-                : order.customerName,
-          };
-        });
-
-        return {
-          ...prev,
-          orders,
-          orderCounter: {
-            ...prev.orderCounter,
-            [removed.eventId]: eventOrders.length,
-          },
-        };
-      });
+      setData((prev) => ({
+        ...prev,
+        orders: prev.orders.filter((order) => order.id !== id),
+      }));
     },
-    [cloudEnabled, data.orders],
+    [cloudEnabled],
   );
 
   const value = useMemo(
@@ -723,6 +782,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       syncReady,
       syncError,
       cloudEnabled,
+      online,
+      retrySync,
       login,
       logout,
       addEvent,
@@ -754,6 +815,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       syncReady,
       syncError,
       cloudEnabled,
+      online,
+      retrySync,
       login,
       logout,
       addEvent,

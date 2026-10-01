@@ -1,5 +1,5 @@
 import { ClipboardList, History, Pencil, Plus, Trash2 } from "lucide-react";
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { Link, Navigate, useNavigate, useParams } from "react-router-dom";
 import {
   Bar,
@@ -33,6 +33,8 @@ export function EventDashboardPage() {
   const [editing, setEditing] = useState(false);
   const [showMaterials, setShowMaterials] = useState(false);
   const [salesProductId, setSalesProductId] = useState("all");
+  const [draftMaterials, setDraftMaterials] = useState<EventMaterialUsed[]>([]);
+  const materialsSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const [name, setName] = useState("");
   const [date, setDate] = useState("");
@@ -54,6 +56,17 @@ export function EventDashboardPage() {
     setCost(String(event.cost));
   }, [event]);
 
+  useEffect(() => {
+    if (!showMaterials || !event) return;
+    setDraftMaterials(event.materialsUsed || []);
+  }, [showMaterials, event?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    return () => {
+      if (materialsSaveTimer.current) clearTimeout(materialsSaveTimer.current);
+    };
+  }, []);
+
   const kpis = useMemo(
     () => (eventId ? eventKPIs(data, eventId) : null),
     [data, eventId],
@@ -71,9 +84,22 @@ export function EventDashboardPage() {
     [kpis, salesProductId],
   );
 
-  const materialsTotal = event ? eventMaterialsCost(event) : 0;
+  const materialsTotal = event
+    ? eventMaterialsCost({
+        ...event,
+        materialsUsed: showMaterials ? draftMaterials : event.materialsUsed,
+      })
+    : 0;
 
   if (!event || !kpis) return <Navigate to="/" replace />;
+
+  function flushMaterials(next: EventMaterialUsed[]) {
+    if (!event) return;
+    if (materialsSaveTimer.current) clearTimeout(materialsSaveTimer.current);
+    materialsSaveTimer.current = setTimeout(() => {
+      updateEvent(event.id, { materialsUsed: next });
+    }, 450);
+  }
 
   function saveEventDetails(e: FormEvent) {
     e.preventDefault();
@@ -100,25 +126,23 @@ export function EventDashboardPage() {
       unit: mat.unit || "kg",
       unitPrice: mat.price,
     };
-    updateEvent(event.id, {
-      materialsUsed: [...(event.materialsUsed || []), row],
-    });
+    const next = [...draftMaterials, row];
+    setDraftMaterials(next);
+    flushMaterials(next);
   }
 
   function updateMaterialRow(id: string, patch: Partial<EventMaterialUsed>) {
-    if (!event) return;
-    updateEvent(event.id, {
-      materialsUsed: (event.materialsUsed || []).map((m) =>
-        m.id === id ? { ...m, ...patch } : m,
-      ),
-    });
+    const next = draftMaterials.map((m) =>
+      m.id === id ? { ...m, ...patch } : m,
+    );
+    setDraftMaterials(next);
+    flushMaterials(next);
   }
 
   function removeMaterialRow(id: string) {
-    if (!event) return;
-    updateEvent(event.id, {
-      materialsUsed: (event.materialsUsed || []).filter((m) => m.id !== id),
-    });
+    const next = draftMaterials.filter((m) => m.id !== id);
+    setDraftMaterials(next);
+    flushMaterials(next);
   }
 
   return (
@@ -278,8 +302,7 @@ export function EventDashboardPage() {
             <div className="kpi-label">Pedidos totales</div>
             <div className="kpi-value">{kpis.totalOrders}</div>
             <div className="kpi-hint">
-              {kpis.inProgressOrders.length} en curso ·{' '}
-              {kpis.readyOrders.length} listos · Toca para ver
+              {kpis.bowlsSold} bowls · {kpis.drinksSold} bebidas
             </div>
           </button>
           <div className="kpi">
@@ -432,7 +455,7 @@ export function EventDashboardPage() {
             </select>
           </div>
 
-          {(event.materialsUsed || []).length === 0 ? (
+          {draftMaterials.length === 0 ? (
             <div className="empty">
               <strong>Sin consumo registrado</strong>
               Añade ingredientes con cantidad (unidades) y precio unitario.
@@ -451,7 +474,7 @@ export function EventDashboardPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {(event.materialsUsed || []).map((m) => (
+                  {draftMaterials.map((m) => (
                     <tr key={m.id}>
                       <td>
                         <input

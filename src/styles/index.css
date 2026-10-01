@@ -1007,8 +1007,20 @@ tbody tr.row-clickable:hover td {
   backdrop-filter: blur(10px);
 }
 
+.modal-header-text {
+  min-width: 0;
+  flex: 1;
+}
+
 .modal-header h3 {
   font-size: 1.2rem;
+}
+
+.modal-subtitle {
+  margin: 0.2rem 0 0;
+  font-size: 0.92rem;
+  color: var(--ink-soft);
+  font-weight: 500;
 }
 
 .modal-actions {
@@ -2223,6 +2235,12 @@ tbody tr.row-clickable:hover td {
   border-bottom: 1px solid rgba(239, 68, 68, 0.35);
 }
 
+.sync-banner-offline {
+  background: rgba(245, 158, 11, 0.18);
+  color: #fde68a;
+  border-bottom: 1px solid rgba(245, 158, 11, 0.35);
+}
+
 @media (max-width: 980px) {
   .order-page {
     grid-template-columns: minmax(0, 1fr);
@@ -2965,10 +2983,14 @@ tbody tr.row-clickable:hover td {
 
 .bowl-table-prep .bowl-table-sections {
   gap: 0.75rem 0.85rem;
+  /* 4 columnas fijas: Base (+ proteína) · Duro · Fruta · Blando */
+  grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
 .bowl-breakdown-avatars {
   gap: 0.45rem 0.55rem;
+  align-items: flex-start;
+  min-height: 4.75rem;
 }
 
 .ingredient-avatar {
@@ -3023,6 +3045,56 @@ tbody tr.row-clickable:hover td {
   word-break: break-word;
 }
 
+@media (min-width: 900px) {
+  .bowl-table-prep .bowl-table-row-visual {
+    gap: 1rem;
+    padding: 1.1rem 1.25rem;
+  }
+
+  .bowl-table-prep .bowl-table-product strong {
+    font-size: 1.2rem;
+  }
+
+  .bowl-table-prep .bowl-table-sections {
+    gap: 1rem 1.15rem;
+  }
+
+  .bowl-table-prep .bowl-breakdown-label {
+    font-size: 0.78rem;
+  }
+
+  .bowl-table-prep .bowl-breakdown-avatars {
+    gap: 0.65rem 0.75rem;
+    min-height: 7.25rem;
+  }
+
+  .bowl-table-prep .ingredient-avatar {
+    max-width: 100px;
+    gap: 0.35rem;
+  }
+
+  .bowl-table-prep .ingredient-avatar-img {
+    width: 84px;
+    height: 84px;
+    font-size: 1.85rem;
+    border-width: 2px;
+  }
+
+  .bowl-table-prep .bowl-breakdown-duro .ingredient-avatar-img {
+    width: 92px;
+    height: 92px;
+  }
+
+  .bowl-table-prep .ingredient-avatar-label {
+    font-size: 0.8rem;
+    line-height: 1.2;
+  }
+
+  .bowl-table-prep .ingredient-avatar.muted .ingredient-avatar-img {
+    font-size: 1.1rem;
+  }
+}
+
 .ingredient-avatar.muted .ingredient-avatar-img {
   opacity: 0.35;
   color: var(--ink-soft);
@@ -3058,10 +3130,6 @@ tbody tr.row-clickable:hover td {
   border-top: 1px solid rgba(168, 85, 224, 0.18);
 }
 
-.bowl-table-sections:has(.bowl-breakdown-extra) {
-  grid-template-columns: repeat(5, minmax(0, 1fr));
-}
-
 .bowl-table .bowl-breakdown-chips {
   margin: 0;
 }
@@ -3080,10 +3148,6 @@ tbody tr.row-clickable:hover td {
   margin-top: 0.55rem;
   padding-top: 0.55rem;
   border-top: 1px solid rgba(168, 85, 224, 0.18);
-}
-
-.bowl-breakdown:has(.bowl-breakdown-extra) {
-  grid-template-columns: repeat(5, minmax(0, 1fr));
 }
 
 .bowl-breakdown-col {
@@ -3129,16 +3193,14 @@ tbody tr.row-clickable:hover td {
 .bowl-breakdown-fruta,
 .bowl-breakdown-blando,
 .bowl-breakdown-duro,
-.bowl-breakdown-extra,
 .bowl-breakdown-label {
   color: var(--lavender-bright);
 }
 
 @media (max-width: 640px) {
   .bowl-table-sections,
-  .bowl-table-sections:has(.bowl-breakdown-extra),
-  .bowl-breakdown,
-  .bowl-breakdown:has(.bowl-breakdown-extra) {
+  .bowl-table-prep .bowl-table-sections,
+  .bowl-breakdown {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }

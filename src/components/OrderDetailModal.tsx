@@ -45,7 +45,8 @@ export function OrderDetailModal({
   return (
     <>
       <Modal
-        title={`Pedido #${currentOrder.number}`}
+        title={currentOrder.customerName}
+        subtitle={`Pedido #${currentOrder.number}`}
         onClose={onClose}
         wide={!prepView}
         fullscreen={prepView}
@@ -64,7 +65,6 @@ export function OrderDetailModal({
       >
         <div className={`order-detail${prepView ? ' order-detail-prep' : ''}`}>
           <div className="order-detail-summary">
-            <strong>{currentOrder.customerName}</strong>
             <span>{formatTime(currentOrder.createdAt)}</span>
           </div>
 
@@ -145,7 +145,7 @@ function BowlLineRow({
     : fallbackIngredients;
   const config = parseRecipe(ingredients);
   const base = ingredients.find((item) => /a[cç]a[ií]/i.test(item)) || 'Açaí';
-  const extras = config.whey ? [WHEY] : [];
+  const baseValues = [base, ...(config.whey ? [WHEY] : [])];
   const isSimple =
     !ingredients.length ||
     (!/a[cç]a[ií]/i.test(ingredients.join(' ')) &&
@@ -177,11 +177,10 @@ function BowlLineRow({
           ) : null
         ) : (
           <>
-            <ChipCell kind="base" label="Base" values={[base]} visual={visual} />
             <ChipCell
-              kind="fruta"
-              label="Fruta"
-              values={config.fruits}
+              kind="base"
+              label="Base"
+              values={baseValues}
               visual={visual}
             />
             <ChipCell
@@ -191,19 +190,17 @@ function BowlLineRow({
               visual={visual}
             />
             <ChipCell
+              kind="fruta"
+              label="Fruta"
+              values={config.fruits}
+              visual={visual}
+            />
+            <ChipCell
               kind="blando"
               label="Blando"
               values={config.softs}
               visual={visual}
             />
-            {extras.length > 0 && (
-              <ChipCell
-                kind="extra"
-                label="Extra"
-                values={extras}
-                visual={visual}
-              />
-            )}
           </>
         )}
       </div>
