@@ -1,6 +1,6 @@
-import { Check, ChefHat, History, Plus } from 'lucide-react';
+import { Check, ChefHat, History, Pencil, Plus } from 'lucide-react';
 import { useMemo, useState, type ReactNode } from 'react';
-import { Link, Navigate, useParams } from 'react-router-dom';
+import { Link, Navigate, useNavigate, useParams } from 'react-router-dom';
 import { OrderDetailModal } from '../components/OrderDetailModal';
 import { PageHeader, Topbar } from '../components/ui';
 import { useStore } from '../lib/store';
@@ -12,6 +12,7 @@ type BoardTab = 'curso' | 'listos';
 
 export function OrdersPage() {
   const { eventId } = useParams();
+  const navigate = useNavigate();
   const { data, updateOrderStatus } = useStore();
   const event = data.events.find((e) => e.id === eventId);
   const [tab, setTab] = useState<BoardTab>('curso');
@@ -33,7 +34,11 @@ export function OrdersPage() {
   const inProgress = eventOrders.filter(
     (o) => o.status === 'pendiente' || o.status === 'en_preparacion',
   );
-  const ready = eventOrders.filter((o) => o.status === 'listo');
+  /** Último marcado como listo primero */
+  const ready = eventOrders
+    .filter((o) => o.status === 'listo')
+    .slice()
+    .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
 
   if (!event) return <Navigate to="/" replace />;
 
@@ -192,7 +197,23 @@ export function OrdersPage() {
             ) : (
               <div className="grid grid-3">
                 {ready.map((o) => (
-                  <OrderCard key={o.id} order={o} className="ready" actions={null} />
+                  <OrderCard
+                    key={o.id}
+                    order={o}
+                    className="ready"
+                    actions={
+                      <button
+                        className="btn btn-primary"
+                        onClick={() =>
+                          navigate(
+                            `/evento/${event.id}/editar-pedido/${o.id}`,
+                          )
+                        }
+                      >
+                        <Pencil size={17} /> Editar
+                      </button>
+                    }
+                  />
                 ))}
               </div>
             )}

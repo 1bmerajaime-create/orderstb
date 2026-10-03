@@ -130,12 +130,9 @@ export function bowlNetPrice(
   return Math.round((gross - lineDiscountAmount(gross, discountType, discountValue)) * 100) / 100;
 }
 
-export function isBowlComplete(config: BowlConfig): boolean {
-  return (
-    config.solids.length >= FREE_SOLID &&
-    config.softs.length >= FREE_SOFT &&
-    config.fruits.length >= FREE_FRUITS
-  );
+/** Ya no exige cupo mínimo; cualquier configuración se puede pedir. */
+export function isBowlComplete(_config: BowlConfig): boolean {
+  return true;
 }
 
 export function toggleInList(list: string[], option: string): string[] {

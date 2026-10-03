@@ -110,6 +110,18 @@ interface StoreContextValue {
     /** Descuento manual de pedido (además o en lugar de promo). */
     extraDiscount?: number;
   }) => Promise<Order>;
+  updateOrder: (
+    id: string,
+    input: {
+      customerName: string;
+      customerEmail?: string;
+      lines: OrderLine[];
+      promotionId?: string;
+      paymentMethod: PaymentMethod;
+      paid: boolean;
+      extraDiscount?: number;
+    },
+  ) => Promise<Order | null>;
   updateOrderStatus: (id: string, status: OrderStatus) => Promise<void>;
   markPaid: (id: string, method: PaymentMethod) => Promise<void>;
   deleteOrder: (id: string) => Promise<void>;
@@ -684,6 +696,69 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     [cloudEnabled, data.promotions],
   );
 
+  const updateOrder = useCallback(
+    async (
+      id: string,
+      input: {
+        customerName: string;
+        customerEmail?: string;
+        lines: OrderLine[];
+        promotionId?: string;
+        paymentMethod: PaymentMethod;
+        paid: boolean;
+        extraDiscount?: number;
+      },
+    ) => {
+      const current = data.orders.find((o) => o.id === id);
+      if (!current) return null;
+      const promo = data.promotions.find((p) => p.id === input.promotionId);
+      const subtotal = calcSubtotal(input.lines);
+      const promoDiscount = calcDiscount(input.lines, promo);
+      const extra = Math.max(0, Number(input.extraDiscount) || 0);
+      const discount = round2(Math.min(subtotal, promoDiscount + extra));
+      const total = round2(Math.max(0, subtotal - discount));
+      const patch: Partial<Order> = {
+        customerName:
+          input.customerName.trim() ||
+          current.customerName ||
+          `Cliente #${current.number}`,
+        customerEmail: input.customerEmail?.trim() || undefined,
+        lines: input.lines,
+        subtotal,
+        discount,
+        total,
+        promotionId: promo?.id,
+        promotionName: promo?.name,
+        paymentMethod: input.paymentMethod,
+        paid: input.paid && input.paymentMethod !== 'pendiente',
+        updatedAt: new Date().toISOString(),
+      };
+      const next = { ...current, ...patch };
+      if (cloudEnabled) {
+        setData((prev) => ({
+          ...prev,
+          orders: prev.orders.map((o) => (o.id === id ? next : o)),
+        }));
+        try {
+          await patchOrder(id, patch);
+        } catch (error) {
+          setData((prev) => ({
+            ...prev,
+            orders: prev.orders.map((o) => (o.id === id ? current : o)),
+          }));
+          throw error;
+        }
+        return next;
+      }
+      setData((prev) => ({
+        ...prev,
+        orders: prev.orders.map((o) => (o.id === id ? next : o)),
+      }));
+      return next;
+    },
+    [cloudEnabled, data.orders, data.promotions],
+  );
+
   const updateOrderStatus = useCallback(
     async (id: string, status: OrderStatus) => {
       const current = data.orders.find((o) => o.id === id);
@@ -805,6 +880,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       updatePromotion,
       deletePromotion,
       createOrder,
+      updateOrder,
       updateOrderStatus,
       markPaid,
       deleteOrder,
@@ -838,6 +914,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       updatePromotion,
       deletePromotion,
       createOrder,
+      updateOrder,
       updateOrderStatus,
       markPaid,
       deleteOrder,

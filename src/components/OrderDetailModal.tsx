@@ -1,5 +1,13 @@
-import { CheckCircle2, Download, Mail, Ticket, Trash2 } from 'lucide-react';
+import {
+  CheckCircle2,
+  Download,
+  Mail,
+  Pencil,
+  Ticket,
+  Trash2,
+} from 'lucide-react';
 import { useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Modal } from './ui';
 import { parseRecipe, WHEY } from '../lib/bowl';
 import { ingredientVisual } from '../lib/ingredientVisuals';
@@ -32,6 +40,7 @@ export function OrderDetailModal({
   order: Order;
   onClose: () => void;
 }) {
+  const navigate = useNavigate();
   const { data, deleteOrder, updateOrderStatus } = useStore();
   const currentOrder = data.orders.find((item) => item.id === order.id) || order;
   const event = data.events.find((item) => item.id === currentOrder.eventId);
@@ -41,6 +50,12 @@ export function OrderDetailModal({
     [data.products, data.recipes, data.sizes],
   );
   const prepView = isInProgressStatus(currentOrder.status);
+  const editPath = `/evento/${currentOrder.eventId}/editar-pedido/${currentOrder.id}`;
+
+  function goEdit() {
+    onClose();
+    navigate(editPath);
+  }
 
   return (
     <>
@@ -53,14 +68,25 @@ export function OrderDetailModal({
         cover={prepView}
         className={prepView ? 'order-prep-modal' : undefined}
         headerActions={
-          <button
-            type="button"
-            className="icon-btn"
-            aria-label="Ticket y desglose"
-            onClick={() => setShowTicket(true)}
-          >
-            <Ticket size={18} />
-          </button>
+          <>
+            <button
+              type="button"
+              className="icon-btn"
+              aria-label="Editar pedido"
+              title="Editar pedido"
+              onClick={goEdit}
+            >
+              <Pencil size={18} />
+            </button>
+            <button
+              type="button"
+              className="icon-btn"
+              aria-label="Ticket y desglose"
+              onClick={() => setShowTicket(true)}
+            >
+              <Ticket size={18} />
+            </button>
+          </>
         }
       >
         <div className={`order-detail${prepView ? ' order-detail-prep' : ''}`}>
@@ -103,6 +129,16 @@ export function OrderDetailModal({
             >
               <Trash2 size={16} /> Eliminar
             </button>
+            {(currentOrder.status === 'listo' ||
+              currentOrder.status === 'entregado') && (
+              <button
+                type="button"
+                className="btn btn-primary btn-lg"
+                onClick={goEdit}
+              >
+                <Pencil size={18} /> Editar pedido
+              </button>
+            )}
             {currentOrder.status !== 'listo' &&
               currentOrder.status !== 'entregado' && (
                 <button

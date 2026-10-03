@@ -1,5 +1,5 @@
 import { Plus, Trash2, X } from 'lucide-react';
-import { useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Navigate, useNavigate, useParams } from 'react-router-dom';
 import { TicketModal } from '../components/OrderDetailModal';
 import { Modal } from '../components/ui';
@@ -16,7 +16,6 @@ import {
   bowlGrossPrice,
   bowlIngredients,
   bowlNetPrice,
-  isBowlComplete,
   isCustomProduct,
   isPaidExtra,
   lineDiscountAmount,
@@ -63,10 +62,13 @@ interface DraftBowl extends BowlConfig {
 }
 
 export function NewOrderPage() {
-  const { eventId } = useParams();
+  const { eventId, orderId: editingOrderId } = useParams();
   const navigate = useNavigate();
-  const { data, createOrder } = useStore();
+  const { data, createOrder, updateOrder, syncReady } = useStore();
   const event = data.events.find((e) => e.id === eventId);
+  const editingOrder = editingOrderId
+    ? data.orders.find((o) => o.id === editingOrderId)
+    : undefined;
 
   const [customerName, setCustomerName] = useState('');
   const [bowls, setBowls] = useState<DraftBowl[]>([]);
@@ -78,6 +80,7 @@ export function NewOrderPage() {
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState('');
   const [createdOrder, setCreatedOrder] = useState<Order | null>(null);
+  const [loadedEditId, setLoadedEditId] = useState<string | null>(null);
 
   const lines: OrderLine[] = useMemo(
     () =>
@@ -142,20 +145,32 @@ export function NewOrderPage() {
 
   const subtotal = calcSubtotal(lines);
   const total = subtotal;
-  const allComplete =
-    bowls.length > 0 &&
-    bowls.every(
-      (bowl) =>
-        bowl.kind === 'simple' ||
-        isBowlComplete({
-          solids: bowl.solids,
-          softs: bowl.softs,
-          fruits: bowl.fruits,
-          whey: bowl.whey,
-        }),
+  const canSubmit = bowls.length > 0 && !submitting;
+
+  useEffect(() => {
+    if (!editingOrder || loadedEditId === editingOrder.id) return;
+    const drafts = editingOrder.lines.map((line) =>
+      draftFromOrderLine(line, resolvedProducts),
     );
+    setCustomerName(editingOrder.customerName || '');
+    setPaymentMethod(editingOrder.paymentMethod || 'tarjeta');
+    setBowls(drafts);
+    setLoadedEditId(editingOrder.id);
+  }, [editingOrder, loadedEditId, resolvedProducts]);
 
   if (!event) return <Navigate to="/" replace />;
+  if (editingOrderId && syncReady && !editingOrder) {
+    return <Navigate to={`/evento/${eventId}/pedidos`} replace />;
+  }
+  if (editingOrderId && !editingOrder) {
+    return (
+      <div className="app-shell">
+        <main className="page" style={{ paddingTop: '3rem' }}>
+          <p className="muted">Cargando pedido…</p>
+        </main>
+      </div>
+    );
+  }
 
   function makeBowl(product: ResolvedProduct): DraftBowl {
     const simple = product.kind === 'simple';
@@ -234,13 +249,6 @@ export function NewOrderPage() {
 
   function confirmDraft() {
     if (!draft) return;
-    const config: BowlConfig = {
-      solids: draft.bowl.solids,
-      softs: draft.bowl.softs,
-      fruits: draft.bowl.fruits,
-      whey: draft.bowl.whey,
-    };
-    if (!isBowlComplete(config)) return;
 
     if (draft.mode === 'new') {
       setBowls((current) => [...current, draft.bowl]);
@@ -267,10 +275,20 @@ export function NewOrderPage() {
   }
 
   async function submit() {
-    if (lines.length === 0 || !allComplete || submitting) return;
+    if (!canSubmit) return;
     setSubmitting(true);
     setSubmitError('');
     try {
+      if (editingOrder) {
+        await updateOrder(editingOrder.id, {
+          customerName,
+          lines,
+          paymentMethod,
+          paid: true,
+        });
+        navigate(`/evento/${event!.id}/pedidos`, { replace: true });
+        return;
+      }
       const order = await createOrder({
         eventId: event!.id,
         customerName,
@@ -281,7 +299,11 @@ export function NewOrderPage() {
       setCreatedOrder(order);
     } catch (error) {
       setSubmitError(
-        error instanceof Error ? error.message : 'No se pudo crear el pedido',
+        error instanceof Error
+          ? error.message
+          : editingOrder
+            ? 'No se pudo guardar el pedido'
+            : 'No se pudo crear el pedido',
       );
       setSubmitting(false);
     }
@@ -292,7 +314,11 @@ export function NewOrderPage() {
   }
 
   function closePage() {
-    navigate(`/evento/${event!.id}`);
+    navigate(
+      editingOrder
+        ? `/evento/${event!.id}/pedidos`
+        : `/evento/${event!.id}`,
+    );
   }
 
   return (
@@ -300,7 +326,11 @@ export function NewOrderPage() {
       <main className="page page-order-new">
         <div className="order-new-header">
           <div>
-            <h1>Nuevo pedido</h1>
+            <h1>
+              {editingOrder
+                ? `Editar pedido #${editingOrder.number}`
+                : 'Nuevo pedido'}
+            </h1>
             <p>{event.name}</p>
           </div>
           <button
@@ -315,16 +345,6 @@ export function NewOrderPage() {
 
         <div className="order-page">
           <section className="order-page-main">
-            <div className="field field-compact">
-              <label htmlFor="order-customer">Nombre del cliente</label>
-              <input
-                id="order-customer"
-                placeholder="Ej. Ana / Dorsal 214"
-                value={customerName}
-                onChange={(e) => setCustomerName(e.target.value)}
-              />
-            </div>
-
             <p className="order-modal-label">Elige productos</p>
             <div className="product-picker product-picker-visual">
               {productGroups.map((group) => {
@@ -457,6 +477,16 @@ export function NewOrderPage() {
               </div>
             )}
 
+            <div className="field field-compact">
+              <label htmlFor="order-customer">Nombre del cliente</label>
+              <input
+                id="order-customer"
+                placeholder="Ej. Ana / Dorsal 214"
+                value={customerName}
+                onChange={(e) => setCustomerName(e.target.value)}
+              />
+            </div>
+
             <div className="field">
               <label>Método de pago</label>
               <div className="payment-grid">
@@ -485,17 +515,21 @@ export function NewOrderPage() {
               <button
                 type="button"
                 className="btn btn-primary btn-lg cart-submit"
-                disabled={lines.length === 0 || !allComplete || submitting}
+                disabled={!canSubmit}
                 onClick={submit}
               >
                 <span className="cart-submit-label">
                   {submitting
-                    ? 'Creando…'
-                    : lines.length === 0 || !allComplete
-                      ? 'Completa el pedido'
-                      : 'Crear pedido'}
+                    ? editingOrder
+                      ? 'Guardando…'
+                      : 'Creando…'
+                    : bowls.length === 0
+                      ? 'Añade un producto'
+                      : editingOrder
+                        ? 'Guardar cambios'
+                        : 'Crear pedido'}
                 </span>
-                {lines.length > 0 && allComplete && !submitting && (
+                {canSubmit && bowls.length > 0 && (
                   <span className="cart-submit-price">{formatEUR(total)}</span>
                 )}
               </button>
@@ -559,7 +593,6 @@ function BowlConfigModal({
     fruits: bowl.fruits,
     whey: bowl.whey,
   };
-  const complete = isBowlComplete(config);
   const gross = bowlGrossPrice(bowl.basePrice, config);
   const discount = lineDiscountAmount(
     gross,
@@ -642,16 +675,10 @@ function BowlConfigModal({
           <button
             type="button"
             className="btn btn-primary btn-lg bowl-modal-confirm"
-            disabled={!complete}
             onClick={onConfirm}
-            aria-disabled={!complete}
           >
-            <span className="bowl-modal-confirm-label">
-              {complete ? confirmLabel : 'Completa el bowl'}
-            </span>
-            {complete && (
-              <span className="bowl-modal-confirm-price">{formatEUR(net)}</span>
-            )}
+            <span className="bowl-modal-confirm-label">{confirmLabel}</span>
+            <span className="bowl-modal-confirm-price">{formatEUR(net)}</span>
           </button>
         </div>
       }
@@ -908,4 +935,51 @@ function isCustomized(bowl: DraftBowl): boolean {
     .join('|');
   const original = bowlIngredients(bowl.baseRecipe).slice(1).sort().join('|');
   return current !== original;
+}
+
+function draftFromOrderLine(
+  line: OrderLine,
+  products: ResolvedProduct[],
+): DraftBowl {
+  const matched =
+    products.find((p) => p.id === line.productId) ||
+    products.find((p) => p.name === line.productName);
+  const simple =
+    matched?.kind === 'simple' ||
+    ((!line.ingredients || line.ingredients.length === 0) && !line.size);
+  const recipe = simple
+    ? { solids: [], softs: [], fruits: [], whey: false }
+    : parseRecipe(line.ingredients || matched?.ingredients || []);
+  const size = simple
+    ? 0
+    : line.size || (matched ? productSizeMl(matched) : DEFAULT_BOWL_SIZE);
+  return {
+    id: uid('bowl'),
+    productId: matched?.id || line.productId,
+    productName: matched?.name || line.productName,
+    size,
+    basePrice:
+      typeof line.baseUnitPrice === 'number'
+        ? line.baseUnitPrice
+        : Number(matched?.price) || line.unitPrice,
+    baseRecipe: {
+      solids: [...recipe.solids],
+      softs: [...recipe.softs],
+      fruits: [...recipe.fruits],
+      whey: recipe.whey,
+    },
+    solids: [...recipe.solids],
+    softs: [...recipe.softs],
+    fruits: [...recipe.fruits],
+    whey: recipe.whey,
+    kind: simple ? 'simple' : 'bowl',
+    imageUrl: matched?.imageUrl,
+    promotionId: line.promotionId,
+    discountType: line.promotionId
+      ? line.lineDiscount && line.baseUnitPrice
+        ? 'fixed'
+        : 'percent'
+      : 'none',
+    discountValue: line.lineDiscount || 0,
+  };
 }

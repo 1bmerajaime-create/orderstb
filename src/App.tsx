@@ -125,6 +125,14 @@ export default function App() {
           }
         />
         <Route
+          path="/evento/:eventId/editar-pedido/:orderId"
+          element={
+            <Protected>
+              <NewOrderPage />
+            </Protected>
+          }
+        />
+        <Route
           path="/evento/:eventId/historico"
           element={
             <Protected>
