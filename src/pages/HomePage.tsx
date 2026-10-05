@@ -94,7 +94,7 @@ export function HomePage() {
   );
   const [promoModal, setPromoModal] = useState<Promotion | "new" | null>(null);
   const [showGanadoBreakdown, setShowGanadoBreakdown] = useState(false);
-  const [showPedidosBreakdown, setShowPedidosBreakdown] = useState(false);
+  const [showEventsBreakdown, setShowEventsBreakdown] = useState(false);
 
   const resolvedProducts = useMemo(
     () => resolveAllProducts(data.products, data.recipes, data.sizes),
@@ -160,44 +160,9 @@ export function HomePage() {
         </div>
 
         <div
-          className="grid grid-4 stagger"
+          className="grid grid-3 stagger"
           style={{ marginBottom: "1.25rem" }}
         >
-          <button
-            type="button"
-            className="kpi kpi-clickable"
-            onClick={() => {
-              setTab("eventos");
-              setEventView("lista");
-              requestAnimationFrame(() => {
-                document
-                  .getElementById("seccion-eventos")
-                  ?.scrollIntoView({ behavior: "smooth", block: "start" });
-              });
-            }}
-          >
-            <div className="kpi-label">Eventos</div>
-            <div className="kpi-value">{homeKpis.totalEvents}</div>
-            <div className="kpi-hint">Toca para ver el listado</div>
-          </button>
-          <button
-            type="button"
-            className="kpi kpi-clickable"
-            onClick={() => setShowPedidosBreakdown(true)}
-          >
-            <div className="kpi-label">Pedidos totales</div>
-            <div className="kpi-value">{homeKpis.totalOrders}</div>
-          </button>
-          <button
-            type="button"
-            className="kpi kpi-clickable"
-            onClick={() => setShowGanadoBreakdown(true)}
-          >
-            <div className="kpi-label">Beneficio total</div>
-            <div className="kpi-value">
-              <Money value={homeKpis.totalGanado} />
-            </div>
-          </button>
           {homeKpis.nextEvent ? (
             <Link
               to={`/evento/${homeKpis.nextEvent.id}`}
@@ -222,6 +187,27 @@ export function HomePage() {
               <div className="kpi-hint">Sin eventos</div>
             </div>
           )}
+          <button
+            type="button"
+            className="kpi kpi-clickable"
+            onClick={() => setShowGanadoBreakdown(true)}
+          >
+            <div className="kpi-label">Beneficio total</div>
+            <div className="kpi-value">
+              <Money value={homeKpis.totalGanado} />
+            </div>
+          </button>
+          <button
+            type="button"
+            className="kpi kpi-clickable"
+            onClick={() => setShowEventsBreakdown(true)}
+          >
+            <div className="kpi-label">Eventos</div>
+            <div className="kpi-value">{homeKpis.totalEvents}</div>
+            <div className="kpi-hint">
+              {homeKpis.totalOrders} pedidos · Toca para ver
+            </div>
+          </button>
         </div>
 
         <div className="nav-pills">
@@ -679,16 +665,17 @@ export function HomePage() {
         )}
       </main>
 
-      {showPedidosBreakdown && (
+      {showEventsBreakdown && (
         <Modal
-          title="Desglose · Pedidos por evento"
-          onClose={() => setShowPedidosBreakdown(false)}
+          title="Eventos"
+          subtitle={`${homeKpis.totalOrders} pedidos en total`}
+          onClose={() => setShowEventsBreakdown(false)}
         >
           <div className="breakdown-list">
             {homeKpis.ordersByEvent.length === 0 ? (
               <div className="empty" style={{ padding: "1rem 0" }}>
                 <strong>Sin eventos</strong>
-                Aún no hay pedidos que desglosar.
+                Crea un evento para empezar.
               </div>
             ) : (
               homeKpis.ordersByEvent.map((row) => (
@@ -697,7 +684,7 @@ export function HomePage() {
                   type="button"
                   className="breakdown-row breakdown-row-click"
                   onClick={() => {
-                    setShowPedidosBreakdown(false);
+                    setShowEventsBreakdown(false);
                     navigate(`/evento/${row.id}`);
                   }}
                 >
@@ -707,7 +694,12 @@ export function HomePage() {
                       {formatDateRange(row.date, row.endDate)}
                     </span>
                   </span>
-                  <strong>{row.count}</strong>
+                  <strong>
+                    {row.count}{" "}
+                    <span className="breakdown-unit">
+                      {row.count === 1 ? "pedido" : "pedidos"}
+                    </span>
+                  </strong>
                 </button>
               ))
             )}
@@ -720,7 +712,7 @@ export function HomePage() {
             <button
               type="button"
               className="btn btn-primary"
-              onClick={() => setShowPedidosBreakdown(false)}
+              onClick={() => setShowEventsBreakdown(false)}
             >
               Cerrar
             </button>

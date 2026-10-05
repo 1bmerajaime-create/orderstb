@@ -172,20 +172,23 @@ export function NewOrderPage() {
     );
   }
 
-  function makeBowl(product: ResolvedProduct): DraftBowl {
+  function makeBowl(
+    product: ResolvedProduct,
+    options?: { requireSizePick?: boolean },
+  ): DraftBowl {
     const simple = product.kind === 'simple';
+    const requireSizePick = Boolean(options?.requireSizePick) && !simple;
     const recipe = simple
       ? { solids: [], softs: [], fruits: [], whey: false }
       : isCustomProduct(product)
         ? { solids: [], softs: [], fruits: [], whey: false }
         : parseRecipe(product.ingredients);
-    const size = simple ? 0 : productSizeMl(product);
     return {
       id: uid('bowl'),
-      productId: product.id,
+      productId: requireSizePick ? '' : product.id,
       productName: product.name,
-      size,
-      basePrice: Number(product.price) || 0,
+      size: requireSizePick ? 0 : simple ? 0 : productSizeMl(product),
+      basePrice: requireSizePick ? 0 : Number(product.price) || 0,
       baseRecipe: {
         ...recipe,
         solids: [...recipe.solids],
@@ -210,7 +213,10 @@ export function NewOrderPage() {
       setBowls((current) => [...current, makeBowl(product)]);
       return;
     }
-    setDraft({ bowl: makeBowl(product), mode: 'new' });
+    setDraft({
+      bowl: makeBowl(product, { requireSizePick: true }),
+      mode: 'new',
+    });
   }
 
   function startEditBowl(bowl: DraftBowl) {
@@ -249,6 +255,7 @@ export function NewOrderPage() {
 
   function confirmDraft() {
     if (!draft) return;
+    if (draft.bowl.kind !== 'simple' && !draft.bowl.size) return;
 
     if (draft.mode === 'new') {
       setBowls((current) => [...current, draft.bowl]);
@@ -593,6 +600,7 @@ function BowlConfigModal({
     fruits: bowl.fruits,
     whey: bowl.whey,
   };
+  const sizeSelected = bowl.kind === 'simple' || bowl.size > 0;
   const gross = bowlGrossPrice(bowl.basePrice, config);
   const discount = lineDiscountAmount(
     gross,
@@ -675,10 +683,16 @@ function BowlConfigModal({
           <button
             type="button"
             className="btn btn-primary btn-lg bowl-modal-confirm"
+            disabled={!sizeSelected}
             onClick={onConfirm}
+            aria-disabled={!sizeSelected}
           >
-            <span className="bowl-modal-confirm-label">{confirmLabel}</span>
-            <span className="bowl-modal-confirm-price">{formatEUR(net)}</span>
+            <span className="bowl-modal-confirm-label">
+              {sizeSelected ? confirmLabel : 'Elige el tamaño'}
+            </span>
+            {sizeSelected && (
+              <span className="bowl-modal-confirm-price">{formatEUR(net)}</span>
+            )}
           </button>
         </div>
       }
@@ -693,13 +707,19 @@ function BowlConfigModal({
         <div className="builder-section-head">
           <div>
             <strong>Tamaño</strong>
-            <span>Elige el tamaño del bowl</span>
+            <span>
+              {sizeSelected
+                ? 'Elige el tamaño del bowl'
+                : 'Selecciona 350 o 500 ml para continuar'}
+            </span>
           </div>
         </div>
         <div className="builder-options size-options">
           {sizeVariants.map((variant) => {
             const size = productSizeMl(variant);
-            const active = bowl.productId === variant.id || bowl.size === size;
+            const active =
+              sizeSelected &&
+              (bowl.productId === variant.id || bowl.size === size);
             return (
               <button
                 key={variant.id}

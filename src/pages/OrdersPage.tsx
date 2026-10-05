@@ -225,6 +225,7 @@ export function OrdersPage() {
         <OrderDetailModal
           order={detailOrder}
           onClose={() => setDetailOrder(null)}
+          onSelectOrder={setDetailOrder}
         />
       )}
     </div>

@@ -14,6 +14,7 @@ export function Modal({
   cover,
   className,
   headerActions,
+  headerExtra,
   footer,
 }: {
   title: string;
@@ -27,6 +28,8 @@ export function Modal({
   cover?: boolean;
   className?: string;
   headerActions?: ReactNode;
+  /** Contenido extra en el header (p. ej. siguientes pedidos). */
+  headerExtra?: ReactNode;
   footer?: ReactNode;
 }) {
   useEffect(() => {
@@ -66,6 +69,7 @@ export function Modal({
             <h3>{title}</h3>
             {subtitle && <p className="modal-subtitle">{subtitle}</p>}
           </div>
+          {headerExtra}
           <div className="modal-header-actions">
             {headerActions}
             <button className="icon-btn" onClick={onClose} aria-label="Cerrar">

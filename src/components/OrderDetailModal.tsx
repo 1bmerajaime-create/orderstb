@@ -33,12 +33,23 @@ function isInProgressStatus(status: Order['status']) {
   return status === 'pendiente' || status === 'en_preparacion';
 }
 
+function compactPrepParts(line: OrderLine): { size: string; duro: string } {
+  const ingredients = line.ingredients?.length ? line.ingredients : [];
+  const config = parseRecipe(ingredients);
+  return {
+    size: line.size ? `${line.size} ml` : line.productName,
+    duro: config.solids.length > 0 ? config.solids.join(', ') : 'Sin duro',
+  };
+}
+
 export function OrderDetailModal({
   order,
   onClose,
+  onSelectOrder,
 }: {
   order: Order;
   onClose: () => void;
+  onSelectOrder?: (order: Order) => void;
 }) {
   const navigate = useNavigate();
   const { data, deleteOrder, updateOrderStatus } = useStore();
@@ -51,6 +62,22 @@ export function OrderDetailModal({
   );
   const prepView = isInProgressStatus(currentOrder.status);
   const editPath = `/evento/${currentOrder.eventId}/editar-pedido/${currentOrder.id}`;
+
+  const upcomingOrders = useMemo(() => {
+    if (!prepView) return [];
+    const queue = data.orders
+      .filter(
+        (item) =>
+          item.eventId === currentOrder.eventId &&
+          isInProgressStatus(item.status),
+      )
+      .sort((a, b) => a.number - b.number);
+    const index = queue.findIndex((item) => item.id === currentOrder.id);
+    if (index < 0) {
+      return queue.filter((item) => item.id !== currentOrder.id).slice(0, 2);
+    }
+    return queue.slice(index + 1, index + 3);
+  }, [prepView, data.orders, currentOrder.eventId, currentOrder.id]);
 
   function goEdit() {
     onClose();
@@ -67,6 +94,36 @@ export function OrderDetailModal({
         fullscreen={prepView}
         cover={prepView}
         className={prepView ? 'order-prep-modal' : undefined}
+        headerExtra={
+          prepView && upcomingOrders.length > 0 ? (
+            <aside className="prep-upcoming" aria-label="Próximos pedidos">
+              {upcomingOrders.map((next) => (
+                <button
+                  key={next.id}
+                  type="button"
+                  className="prep-upcoming-card"
+                  onClick={() => onSelectOrder?.(next)}
+                  disabled={!onSelectOrder}
+                >
+                  <strong className="prep-upcoming-name">
+                    {next.customerName}
+                  </strong>
+                  <ul className="prep-upcoming-bowls">
+                    {next.lines.map((line, index) => {
+                      const parts = compactPrepParts(line);
+                      return (
+                        <li key={`${line.productId}-${index}`}>
+                          <span className="prep-upcoming-size">{parts.size}</span>
+                          <span className="prep-upcoming-duro">{parts.duro}</span>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </button>
+              ))}
+            </aside>
+          ) : undefined
+        }
         headerActions={
           <>
             <button
@@ -145,11 +202,19 @@ export function OrderDetailModal({
                   type="button"
                   className="btn btn-primary btn-lg"
                   onClick={() => {
-                    updateOrderStatus(currentOrder.id, 'listo');
-                    onClose();
+                    const nextOrder = upcomingOrders[0];
+                    void updateOrderStatus(currentOrder.id, 'listo').then(
+                      () => {
+                        if (nextOrder && onSelectOrder) {
+                          onSelectOrder(nextOrder);
+                        } else {
+                          onClose();
+                        }
+                      },
+                    );
                   }}
                 >
-                  <CheckCircle2 size={18} /> Marcar como terminado
+                  Terminado
                 </button>
               )}
           </div>

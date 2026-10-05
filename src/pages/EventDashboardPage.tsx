@@ -5,6 +5,7 @@ import {
   Bar,
   BarChart,
   CartesianGrid,
+  Legend,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -15,8 +16,10 @@ import { useStore } from "../lib/store";
 import { resolveAllProducts } from "../lib/productSizes";
 import {
   buildSalesSeries,
+  eventDays,
   eventKPIs,
   eventMaterialsCost,
+  formatDate,
   formatDateRange,
   formatEUR,
   IVA_RATE,
@@ -24,6 +27,15 @@ import {
   uid,
 } from "../lib/utils";
 import type { EventMaterialUsed } from "../types";
+
+const DAY_SERIES_COLORS = [
+  "#a855e0",
+  "#22d3ee",
+  "#f472b6",
+  "#a3e635",
+  "#fb923c",
+  "#818cf8",
+];
 
 export function EventDashboardPage() {
   const { eventId } = useParams();
@@ -33,6 +45,7 @@ export function EventDashboardPage() {
   const [editing, setEditing] = useState(false);
   const [showMaterials, setShowMaterials] = useState(false);
   const [salesProductId, setSalesProductId] = useState("all");
+  const [salesDay, setSalesDay] = useState("all");
   const [draftMaterials, setDraftMaterials] = useState<EventMaterialUsed[]>([]);
   const materialsSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -54,6 +67,8 @@ export function EventDashboardPage() {
     setEndDate(event.endDate || event.date);
     setPlace(event.place);
     setCost(String(event.cost));
+    setSalesDay("all");
+    setSalesProductId("all");
   }, [event]);
 
   useEffect(() => {
@@ -72,17 +87,70 @@ export function EventDashboardPage() {
     [data, eventId],
   );
 
-  const salesSeries = useMemo(
+  const eventDayList = useMemo(
+    () => (event ? eventDays(event) : []),
+    [event],
+  );
+  const multiDay = eventDayList.length > 1;
+  const salesProductFilter =
+    salesProductId === "all" ? undefined : salesProductId;
+
+  const daySeriesMeta = useMemo(
+    () =>
+      eventDayList.map((day, index) => ({
+        day,
+        key: `day_${day}`,
+        label: formatDate(day),
+        color: DAY_SERIES_COLORS[index % DAY_SERIES_COLORS.length],
+      })),
+    [eventDayList],
+  );
+
+  /** Un gráfico: horas en X, una serie por día. */
+  const multiDayHourlySeries = useMemo(() => {
+    if (!kpis || !multiDay) return [];
+    const byHour: Record<string, Record<string, number>> = {};
+    for (const meta of daySeriesMeta) {
+      const hours = buildSalesSeries(
+        kpis.completedOrders,
+        "hora",
+        salesProductFilter,
+        meta.day,
+      );
+      for (const point of hours) {
+        if (!byHour[point.label]) byHour[point.label] = {};
+        byHour[point.label][meta.key] = point.total;
+      }
+    }
+    return Object.keys(byHour)
+      .sort((a, b) => a.localeCompare(b))
+      .map((hour) => {
+        const row: Record<string, string | number> = { label: hour };
+        for (const meta of daySeriesMeta) {
+          row[meta.key] = byHour[hour][meta.key] || 0;
+        }
+        return row;
+      });
+  }, [kpis, multiDay, daySeriesMeta, salesProductFilter]);
+
+  const singleDaySeries = useMemo(
     () =>
       kpis
         ? buildSalesSeries(
             kpis.completedOrders,
             "hora",
-            salesProductId === "all" ? undefined : salesProductId,
+            salesProductFilter,
+            multiDay && salesDay !== "all" ? salesDay : undefined,
           )
         : [],
-    [kpis, salesProductId],
+    [kpis, salesProductFilter, multiDay, salesDay],
   );
+
+  const hasSalesData = multiDay
+    ? multiDayHourlySeries.some((row) =>
+        daySeriesMeta.some((meta) => Number(row[meta.key] || 0) > 0),
+      )
+    : singleDaySeries.some((point) => point.total > 0);
 
   const materialsTotal = event
     ? eventMaterialsCost({
@@ -345,58 +413,76 @@ export function EventDashboardPage() {
           <section className="panel">
             <div className="panel-header">
               <div>
-                <h2>Ventas durante el día</h2>
-                <p className="panel-subtitle">Ingresos agrupados por hora</p>
+                <h2>
+                  {multiDay ? "Ventas por hora" : "Ventas durante el día"}
+                </h2>
+                <p className="panel-subtitle">
+                  {multiDay
+                    ? "Evolución horaria de cada día del evento"
+                    : "Ingresos agrupados por hora"}
+                </p>
               </div>
               <select
                 className="chart-product-filter"
                 aria-label="Filtrar ventas por producto"
                 value={salesProductId}
-                onChange={(event) => setSalesProductId(event.target.value)}
+                onChange={(e) => setSalesProductId(e.target.value)}
               >
                 <option value="all">Todos los productos</option>
                 {resolvedProducts.map((product) => (
                   <option key={product.id} value={product.id}>
                     {product.name}
-                    {product.size ? ` · ${product.size} ml` : ''}
+                    {product.size ? ` · ${product.size} ml` : ""}
                   </option>
                 ))}
               </select>
             </div>
-            {salesSeries.length === 0 ? (
+
+            {!hasSalesData ? (
               <div className="empty">
                 <strong>Sin datos aún</strong>
                 Las ventas aparecerán cuando registres pedidos.
               </div>
+            ) : multiDay ? (
+              <>
+                <div className="sales-chart-mobile">
+                  <div className="chart-filters" role="tablist" aria-label="Día">
+                    <button
+                      type="button"
+                      className={`nav-pill${salesDay === "all" ? " active" : ""}`}
+                      onClick={() => setSalesDay("all")}
+                    >
+                      Todos los días
+                    </button>
+                    {eventDayList.map((day) => (
+                      <button
+                        key={day}
+                        type="button"
+                        className={`nav-pill${salesDay === day ? " active" : ""}`}
+                        onClick={() => setSalesDay(day)}
+                      >
+                        {formatDate(day)}
+                      </button>
+                    ))}
+                  </div>
+                  {salesDay === "all" ? (
+                    <SalesMultiDayHourlyChart
+                      data={multiDayHourlySeries}
+                      series={daySeriesMeta}
+                    />
+                  ) : (
+                    <SalesBarChart data={singleDaySeries} />
+                  )}
+                </div>
+                <div className="sales-chart-desktop">
+                  <SalesMultiDayHourlyChart
+                    data={multiDayHourlySeries}
+                    series={daySeriesMeta}
+                  />
+                </div>
+              </>
             ) : (
-              <div className="chart-box">
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={salesSeries}>
-                    <CartesianGrid
-                      stroke="rgba(201,168,232,0.12)"
-                      vertical={false}
-                    />
-                    <XAxis
-                      dataKey="label"
-                      stroke="#c4a8de"
-                      tick={{ fill: "#c4a8de", fontSize: 12 }}
-                    />
-                    <YAxis
-                      stroke="#c4a8de"
-                      tick={{ fill: "#c4a8de", fontSize: 12 }}
-                    />
-                    <Tooltip
-                      contentStyle={{
-                        background: "#1e1030",
-                        border: "1px solid rgba(201,168,232,0.2)",
-                        borderRadius: 12,
-                      }}
-                      formatter={(v) => formatEUR(Number(v))}
-                    />
-                    <Bar dataKey="total" fill="#a855e0" radius={[8, 8, 0, 0]} />
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
+              <SalesBarChart data={singleDaySeries} />
             )}
           </section>
 
@@ -412,9 +498,19 @@ export function EventDashboardPage() {
             ) : (
               <div className="top-products-list">
                 {kpis.productSales.map((product, index) => (
-                  <div className="top-product-row" key={product.name}>
+                  <div
+                    className="top-product-row"
+                    key={`${product.id}-${product.size || 0}-${index}`}
+                  >
                     <span className="top-product-position">{index + 1}</span>
-                    <span className="top-product-name">{product.name}</span>
+                    <span className="top-product-name">
+                      {product.name}
+                      {product.size ? (
+                        <span className="top-product-size">
+                          {product.size} ml
+                        </span>
+                      ) : null}
+                    </span>
                     <strong>{product.qty} ud.</strong>
                     <span>{formatEUR(product.revenue)}</span>
                   </div>
@@ -557,6 +653,87 @@ export function EventDashboardPage() {
           </div>
         </Modal>
       )}
+    </div>
+  );
+}
+
+function SalesBarChart({
+  data,
+}: {
+  data: Array<{ label: string; total: number; count: number }>;
+}) {
+  return (
+    <div className="chart-box">
+      <ResponsiveContainer width="100%" height="100%">
+        <BarChart data={data}>
+          <CartesianGrid stroke="rgba(201,168,232,0.12)" vertical={false} />
+          <XAxis
+            dataKey="label"
+            stroke="#c4a8de"
+            tick={{ fill: "#c4a8de", fontSize: 12 }}
+          />
+          <YAxis stroke="#c4a8de" tick={{ fill: "#c4a8de", fontSize: 12 }} />
+          <Tooltip
+            contentStyle={{
+              background: "#1e1030",
+              border: "1px solid rgba(201,168,232,0.2)",
+              borderRadius: 12,
+            }}
+            formatter={(v) => formatEUR(Number(v))}
+          />
+          <Bar dataKey="total" fill="#a855e0" radius={[8, 8, 0, 0]} />
+        </BarChart>
+      </ResponsiveContainer>
+    </div>
+  );
+}
+
+function SalesMultiDayHourlyChart({
+  data,
+  series,
+}: {
+  data: Array<Record<string, string | number>>;
+  series: Array<{ key: string; label: string; color: string }>;
+}) {
+  return (
+    <div className="chart-box chart-box-tall">
+      <ResponsiveContainer width="100%" height="100%">
+        <BarChart data={data}>
+          <CartesianGrid stroke="rgba(201,168,232,0.12)" vertical={false} />
+          <XAxis
+            dataKey="label"
+            stroke="#c4a8de"
+            tick={{ fill: "#c4a8de", fontSize: 12 }}
+          />
+          <YAxis stroke="#c4a8de" tick={{ fill: "#c4a8de", fontSize: 12 }} />
+          <Tooltip
+            contentStyle={{
+              background: "#1e1030",
+              border: "1px solid rgba(201,168,232,0.2)",
+              borderRadius: 12,
+            }}
+            formatter={(v, name) => [
+              formatEUR(Number(v)),
+              series.find((item) => item.key === name)?.label || String(name),
+            ]}
+          />
+          <Legend
+            formatter={(value) =>
+              series.find((item) => item.key === value)?.label || String(value)
+            }
+            wrapperStyle={{ color: "#c4a8de", fontSize: 12 }}
+          />
+          {series.map((item) => (
+            <Bar
+              key={item.key}
+              dataKey={item.key}
+              name={item.key}
+              fill={item.color}
+              radius={[6, 6, 0, 0]}
+            />
+          ))}
+        </BarChart>
+      </ResponsiveContainer>
     </div>
   );
 }

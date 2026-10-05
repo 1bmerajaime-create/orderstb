@@ -185,10 +185,24 @@ export function buildSalesSeries(
   orders: Order[],
   granularity: ChartGranularity,
   productId?: string,
+  /** Filtra pedidos a un día concreto (YYYY-MM-DD). */
+  dayFilter?: string,
+  /** Días a incluir aunque no haya ventas (p. ej. rango del evento). */
+  ensureKeys?: string[],
 ): Array<{ label: string; total: number; count: number }> {
   const buckets: Record<string, { total: number; count: number }> = {};
 
+  if (granularity === 'dia' && ensureKeys?.length) {
+    for (const key of ensureKeys) {
+      buckets[key] = { total: 0, count: 0 };
+    }
+  }
+
   orders.forEach((o) => {
+    const d = new Date(o.createdAt);
+    const dayKey = toLocalISO(d);
+    if (dayFilter && dayKey !== dayFilter) return;
+
     const productTotal = productId
       ? o.lines
           .filter((line) => line.productId === productId)
@@ -198,12 +212,12 @@ export function buildSalesSeries(
           )
       : o.total;
     if (productId && productTotal === 0) return;
-    const d = new Date(o.createdAt);
+
     let key: string;
     if (granularity === 'hora') {
       key = `${String(d.getHours()).padStart(2, '0')}:00`;
     } else if (granularity === 'dia') {
-      key = toLocalISO(d);
+      key = dayKey;
     } else {
       key = weekKey(d);
     }
@@ -252,19 +266,24 @@ export function eventKPIs(data: AppData, eventId: string) {
     });
   });
 
-  const productSales: Record<string, { name: string; qty: number; revenue: number }> =
-    {};
+  const productSales: Record<
+    string,
+    { id: string; name: string; size?: number; qty: number; revenue: number }
+  > = {};
   completed.forEach((o) => {
     o.lines.forEach((l) => {
-      if (!productSales[l.productId]) {
-        productSales[l.productId] = {
+      const key = `${l.productId}|${l.size || 0}`;
+      if (!productSales[key]) {
+        productSales[key] = {
+          id: l.productId,
           name: l.productName,
+          size: l.size,
           qty: 0,
           revenue: 0,
         };
       }
-      productSales[l.productId].qty += l.quantity;
-      productSales[l.productId].revenue += l.unitPrice * l.quantity;
+      productSales[key].qty += l.quantity;
+      productSales[key].revenue += l.unitPrice * l.quantity;
     });
   });
 
