@@ -126,7 +126,6 @@ export function OrdersPage() {
           backTo={`/evento/${event.id}`}
           backLabel="Atrás"
           title="Pedidos"
-          description="Consulta cada producto y sus ingredientes. La acción principal termina el pedido y lo mueve a Listos."
           actions={
             <Link
               className="btn btn-primary"

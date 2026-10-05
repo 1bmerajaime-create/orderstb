@@ -153,10 +153,6 @@ export function HomePage() {
       <main className="page">
         <div className="page-header">
           <h1>Inicio</h1>
-          <p>
-            Planifica eventos, gestiona el catálogo de bowls y controla
-            promociones desde un único lugar.
-          </p>
         </div>
 
         <div
@@ -195,6 +191,14 @@ export function HomePage() {
             <div className="kpi-label">Beneficio total</div>
             <div className="kpi-value">
               <Money value={homeKpis.totalGanado} />
+            </div>
+            <div className="kpi-hint kpi-hint-split">
+              <span className="num-positive">
+                Ingreso {formatEUR(homeKpis.revenue)}
+              </span>
+              <span className="num-negative">
+                Gasto {formatEUR(homeKpis.eventCosts + homeKpis.materials)}
+              </span>
             </div>
           </button>
           <button
@@ -732,7 +736,7 @@ export function HomePage() {
             </div>
             <div className="breakdown-row">
               <span>Dinero generado</span>
-              <strong>
+              <strong className="num-positive">
                 <Money value={homeKpis.revenue} />
               </strong>
             </div>

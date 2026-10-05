@@ -89,6 +89,7 @@ export function OrderDetailModal({
       <Modal
         title={currentOrder.customerName}
         subtitle={`Pedido #${currentOrder.number}`}
+        transitionKey={currentOrder.id}
         onClose={onClose}
         wide={!prepView}
         fullscreen={prepView}
@@ -202,16 +203,16 @@ export function OrderDetailModal({
                   type="button"
                   className="btn btn-primary btn-lg"
                   onClick={() => {
+                    const finishingId = currentOrder.id;
                     const nextOrder = upcomingOrders[0];
-                    void updateOrderStatus(currentOrder.id, 'listo').then(
-                      () => {
-                        if (nextOrder && onSelectOrder) {
-                          onSelectOrder(nextOrder);
-                        } else {
-                          onClose();
-                        }
-                      },
-                    );
+                    // Cambiar al siguiente primero para no salir de la vista prep.
+                    if (nextOrder && onSelectOrder) {
+                      onSelectOrder(nextOrder);
+                      void updateOrderStatus(finishingId, 'listo');
+                      return;
+                    }
+                    onClose();
+                    void updateOrderStatus(finishingId, 'listo');
                   }}
                 >
                   Terminado

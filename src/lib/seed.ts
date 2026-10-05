@@ -6,7 +6,7 @@ import {
   UNIT_SIZE,
 } from './productSizes';
 
-export const PASSWORD = 'tropic.boost';
+export const PASSWORD = 'tb26';
 
 function linesForRecipe(recipeId: string) {
   return CANONICAL_SIZES.map((size) => ({

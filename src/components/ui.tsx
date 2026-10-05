@@ -16,6 +16,7 @@ export function Modal({
   headerActions,
   headerExtra,
   footer,
+  transitionKey,
 }: {
   title: string;
   subtitle?: string;
@@ -31,6 +32,8 @@ export function Modal({
   /** Contenido extra en el header (p. ej. siguientes pedidos). */
   headerExtra?: ReactNode;
   footer?: ReactNode;
+  /** Si cambia, anima título y cuerpo (p. ej. pasar al siguiente pedido). */
+  transitionKey?: string;
 }) {
   useEffect(() => {
     const prev = document.body.style.overflow;
@@ -65,11 +68,21 @@ export function Modal({
         aria-label={title}
       >
         <div className="modal-header">
-          <div className="modal-header-text">
+          <div
+            key={transitionKey ? `title-${transitionKey}` : undefined}
+            className={`modal-header-text${transitionKey ? ' modal-swap-in' : ''}`}
+          >
             <h3>{title}</h3>
             {subtitle && <p className="modal-subtitle">{subtitle}</p>}
           </div>
-          {headerExtra}
+          {headerExtra ? (
+            <div
+              key={transitionKey ? `extra-${transitionKey}` : undefined}
+              className={`modal-header-extra${transitionKey ? ' modal-swap-in' : ''}`}
+            >
+              {headerExtra}
+            </div>
+          ) : null}
           <div className="modal-header-actions">
             {headerActions}
             <button className="icon-btn" onClick={onClose} aria-label="Cerrar">
@@ -77,7 +90,12 @@ export function Modal({
             </button>
           </div>
         </div>
-        <div className="modal-body">{children}</div>
+        <div
+          key={transitionKey ? `body-${transitionKey}` : undefined}
+          className={`modal-body${transitionKey ? ' modal-swap-in' : ''}`}
+        >
+          {children}
+        </div>
         {footer && <div className="modal-footer">{footer}</div>}
       </div>
     </div>
@@ -171,13 +189,9 @@ export function PageHeader({
         </div>
       )}
       <div className="page-header-main">
-        {(title || actions) && (
-          <div className="page-header-title-row">
-            {title && <h1>{title}</h1>}
-            {actions && <div className="event-header-actions">{actions}</div>}
-          </div>
-        )}
-        {description && <p>{description}</p>}
+        {title && <h1>{title}</h1>}
+        {description && <p className="page-header-desc">{description}</p>}
+        {actions && <div className="event-header-actions">{actions}</div>}
       </div>
     </div>
   );
