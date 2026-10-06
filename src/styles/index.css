@@ -263,6 +263,51 @@ h3,
   font-size: 1.15rem;
 }
 
+.ready-heading {
+  display: flex;
+  align-items: baseline;
+  gap: 0.55rem;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.ready-heading h2 {
+  margin: 0;
+}
+
+.ready-count {
+  font-size: 0.85rem;
+  color: var(--ink-soft);
+  font-weight: 600;
+}
+
+.filter-btn-active {
+  border-color: rgba(168, 85, 224, 0.55);
+  background: rgba(168, 85, 224, 0.18);
+  color: var(--ink);
+}
+
+.order-filters {
+  display: flex;
+  flex-direction: column;
+  gap: 1.15rem;
+}
+
+.order-filters h3 {
+  margin: 0 0 0.5rem;
+  font-size: 0.82rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+}
+
+.order-filter-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+
 .kpi {
   background: var(--surface);
   border: 1px solid var(--line);

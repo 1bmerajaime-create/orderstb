@@ -28,6 +28,7 @@ import {
   CANONICAL_SIZES,
   UNIT_SIZE,
   ensureCanonicalCatalog,
+  isSupportedBowlSize,
 } from './productSizes';
 import { loadData, normalizeData } from './storage';
 
@@ -107,12 +108,33 @@ async function ensureMissingCanonicalOnly(): Promise<void> {
     batch.set(doc(db, COLLECTIONS.sizes, size.id), stripUndefined(size));
     writes += 1;
   }
+  for (const sizeDoc of sizesSnap.docs) {
+    const size = { id: sizeDoc.id, ...sizeDoc.data() } as BowlSize;
+    if (isSupportedBowlSize(size)) continue;
+    batch.delete(doc(db, COLLECTIONS.sizes, size.id));
+    writes += 1;
+  }
+  const keptSizeIds = new Set(
+    [
+      ...sizesSnap.docs.map((item) => ({ id: item.id, ...item.data() })),
+      ...CANONICAL_SIZES,
+      UNIT_SIZE,
+    ]
+      .filter((size) => isSupportedBowlSize(size as BowlSize))
+      .map((size) => size.id),
+  );
   for (const product of catalog.products) {
     if (existingProductIds.has(product.id)) continue;
     batch.set(
       doc(db, COLLECTIONS.products, product.id),
       stripUndefined(product),
     );
+    writes += 1;
+  }
+  for (const productDoc of productsSnap.docs) {
+    const product = { id: productDoc.id, ...productDoc.data() } as Product;
+    if (keptSizeIds.has(product.sizeId)) continue;
+    batch.delete(doc(db, COLLECTIONS.products, product.id));
     writes += 1;
   }
 

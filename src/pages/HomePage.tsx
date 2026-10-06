@@ -21,6 +21,7 @@ import {
   toLocalISO,
 } from "../lib/utils";
 import {
+  ALLOWED_BOWL_MLS,
   DEFAULT_BOWL_SIZE,
   formatSizeLabel,
   resolveAllProducts,
@@ -1603,14 +1604,18 @@ function SizeFormModal({
         <div className="grid grid-2">
           <div className="field">
             <label>Tamaño (ml)</label>
-            <input
-              type="number"
-              min="1"
-              step="1"
+            <select
+              className="product-size-select"
               value={ml}
               onChange={(e) => setMl(e.target.value)}
               required
-            />
+            >
+              {ALLOWED_BOWL_MLS.map((option) => (
+                <option key={option} value={option}>
+                  {option} ml
+                </option>
+              ))}
+            </select>
           </div>
           <div className="field">
             <label>Precio (€)</label>

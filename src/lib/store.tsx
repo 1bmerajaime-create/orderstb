@@ -42,7 +42,7 @@ import {
 import { cloudLogin, cloudLogout, isCloudEnabled } from './firebase';
 import { isAuthenticated, loadData, saveData, setAuthenticated } from './storage';
 import { PASSWORD } from './seed';
-import { migrateCatalog, UNIT_SIZE } from './productSizes';
+import { migrateCatalog, UNIT_SIZE, isSupportedBowlSize } from './productSizes';
 import {
   calcDiscount,
   calcSubtotal,
@@ -383,6 +383,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             ? UNIT_SIZE.id
             : `size-${s.ml}`,
       };
+      if (!isSupportedBowlSize(size)) return size;
       if (cloudEnabled) await upsertSize(size);
       else
         setData((prev) => ({
@@ -414,6 +415,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           ...next,
           id: sizeIdFor(next),
         };
+        if (!isSupportedBowlSize(canonical)) return;
         if (canonical.id !== id) {
           await upsertSize(canonical);
           await removeSize(id);
@@ -431,6 +433,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         if (!current) return prev;
         const next = { ...current, ...patch };
         const canonical: BowlSize = { ...next, id: sizeIdFor(next) };
+        if (!isSupportedBowlSize(canonical)) return prev;
         return {
           ...prev,
           sizes: prev.sizes

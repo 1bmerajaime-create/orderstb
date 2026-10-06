@@ -17,6 +17,9 @@ export const DEFAULT_BOWL_SIZE = 500;
 
 export type BowlSizeMl = number;
 
+/** Tamaños de vaso: 350 y 500 ml. */
+export const ALLOWED_BOWL_MLS = [350, 500] as const;
+
 /** Tamaños base del negocio. */
 export const CANONICAL_SIZES: BowlSize[] = [
   { id: 'size-350', ml: 350, price: 10 },
@@ -103,6 +106,17 @@ export function formatSizeLabel(size: Pick<BowlSize, 'ml' | 'label'>): string {
   if (size.label) return size.label;
   if (!size.ml) return 'Ud.';
   return `${size.ml} ml`;
+}
+
+export function isUnitSize(size: Pick<BowlSize, 'id' | 'ml' | 'label'>): boolean {
+  return size.id === UNIT_SIZE.id || size.ml === 0 || size.label === 'Ud.';
+}
+
+export function isSupportedBowlSize(
+  size: Pick<BowlSize, 'id' | 'ml' | 'label'>,
+): boolean {
+  if (isUnitSize(size)) return true;
+  return (ALLOWED_BOWL_MLS as readonly number[]).includes(size.ml);
 }
 
 export interface ProductGroup {
@@ -327,6 +341,13 @@ export function ensureCanonicalCatalog(input: {
     ...UNIT_SIZE,
     label: existingUnit?.label || UNIT_SIZE.label,
   });
+
+  for (const [id, size] of [...sizes.entries()]) {
+    if (!isSupportedBowlSize(size)) sizes.delete(id);
+  }
+  for (const [id, product] of [...products.entries()]) {
+    if (!sizes.has(product.sizeId)) products.delete(id);
+  }
 
   for (const recipe of CANONICAL_RECIPES) {
     for (const size of CANONICAL_SIZES) {
