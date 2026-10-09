@@ -1,5 +1,5 @@
 import { ClipboardList, History, Pencil, Plus, Trash2 } from "lucide-react";
-import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { Link, Navigate, useNavigate, useParams } from "react-router-dom";
 import {
   Bar,
@@ -18,15 +18,11 @@ import {
   buildSalesSeries,
   eventDays,
   eventKPIs,
-  eventMaterialsCost,
   formatDate,
   formatDateRange,
   formatEUR,
   IVA_RATE,
-  round2,
-  uid,
 } from "../lib/utils";
-import type { EventMaterialUsed, Material } from "../types";
 
 const DAY_SERIES_COLORS = [
   "#a855e0",
@@ -43,13 +39,8 @@ export function EventDashboardPage() {
   const { data, logout, updateEvent, deleteEvent } = useStore();
   const event = data.events.find((e) => e.id === eventId);
   const [editing, setEditing] = useState(false);
-  const [showMaterials, setShowMaterials] = useState(false);
-  const [editingUsedId, setEditingUsedId] = useState<string | null>(null);
-  const [addingUsed, setAddingUsed] = useState(false);
   const [salesProductId, setSalesProductId] = useState("all");
   const [salesDay, setSalesDay] = useState("all");
-  const [draftMaterials, setDraftMaterials] = useState<EventMaterialUsed[]>([]);
-  const materialsSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const [name, setName] = useState("");
   const [date, setDate] = useState("");
@@ -72,19 +63,6 @@ export function EventDashboardPage() {
     setSalesDay("all");
     setSalesProductId("all");
   }, [event]);
-
-  useEffect(() => {
-    if (!showMaterials || !event) return;
-    setDraftMaterials(event.materialsUsed || []);
-    setEditingUsedId(null);
-    setAddingUsed(false);
-  }, [showMaterials, event?.id]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  useEffect(() => {
-    return () => {
-      if (materialsSaveTimer.current) clearTimeout(materialsSaveTimer.current);
-    };
-  }, []);
 
   const kpis = useMemo(
     () => (eventId ? eventKPIs(data, eventId) : null),
@@ -156,32 +134,7 @@ export function EventDashboardPage() {
       )
     : singleDaySeries.some((point) => point.total > 0);
 
-  const materialsTotal = event
-    ? eventMaterialsCost({
-        ...event,
-        materialsUsed: showMaterials ? draftMaterials : event.materialsUsed,
-      })
-    : 0;
-
-  const sortedDraftMaterials = useMemo(
-    () =>
-      [...draftMaterials].sort((a, b) => {
-        const totalA = (Number(a.quantity) || 0) * (Number(a.unitPrice) || 0);
-        const totalB = (Number(b.quantity) || 0) * (Number(b.unitPrice) || 0);
-        return totalB - totalA;
-      }),
-    [draftMaterials],
-  );
-
   if (!event || !kpis) return <Navigate to="/" replace />;
-
-  function flushMaterials(next: EventMaterialUsed[]) {
-    if (!event) return;
-    if (materialsSaveTimer.current) clearTimeout(materialsSaveTimer.current);
-    materialsSaveTimer.current = setTimeout(() => {
-      updateEvent(event.id, { materialsUsed: next });
-    }, 450);
-  }
 
   function saveEventDetails(e: FormEvent) {
     e.preventDefault();
@@ -196,48 +149,6 @@ export function EventDashboardPage() {
     });
     setEditing(false);
   }
-
-  function closeMaterialsScreen() {
-    setShowMaterials(false);
-    setEditingUsedId(null);
-    setAddingUsed(false);
-  }
-
-  function openAddMaterial() {
-    setEditingUsedId(null);
-    setAddingUsed(true);
-  }
-
-  function openEditMaterial(id: string) {
-    setAddingUsed(false);
-    setEditingUsedId(id);
-  }
-
-  function closeMaterialEditor() {
-    setEditingUsedId(null);
-    setAddingUsed(false);
-  }
-
-  function saveMaterialUsed(row: EventMaterialUsed, isNew: boolean) {
-    const next = isNew
-      ? [...draftMaterials, row]
-      : draftMaterials.map((m) => (m.id === row.id ? row : m));
-    setDraftMaterials(next);
-    flushMaterials(next);
-    closeMaterialEditor();
-  }
-
-  function removeMaterialRow(id: string) {
-    const next = draftMaterials.filter((m) => m.id !== id);
-    setDraftMaterials(next);
-    flushMaterials(next);
-    closeMaterialEditor();
-  }
-
-  const editingMaterial =
-    editingUsedId != null
-      ? draftMaterials.find((m) => m.id === editingUsedId) || null
-      : null;
 
   return (
     <div className="app-shell">
@@ -411,7 +322,7 @@ export function EventDashboardPage() {
           <button
             type="button"
             className="kpi kpi-clickable"
-            onClick={() => setShowMaterials(true)}
+            onClick={() => navigate(`/evento/${event.id}/materia-prima`)}
           >
             <div className="kpi-label">Materia prima</div>
             <div className="kpi-value num-negative">
@@ -546,244 +457,7 @@ export function EventDashboardPage() {
           </section>
         </div>
       </main>
-
-      {showMaterials && (
-        <Modal
-          title="Materia prima gastada"
-          subtitle={event.name}
-          onClose={closeMaterialsScreen}
-          cover
-          className="materials-cover-modal"
-          footer={
-            <button
-              type="button"
-              className="btn btn-primary"
-              onClick={openAddMaterial}
-            >
-              <Plus size={16} /> Añadir
-            </button>
-          }
-        >
-          <div className="materials-screen">
-            <div className="materials-screen-summary">
-              <span className="materials-screen-summary-label">
-                Total registrado
-              </span>
-              <strong className="materials-screen-summary-value">
-                {formatEUR(materialsTotal)}
-              </strong>
-            </div>
-
-            {draftMaterials.length === 0 ? (
-              <div className="empty">
-                <strong>Sin consumo registrado</strong>
-                Añade ingredientes del catálogo y ajusta cantidad y precio.
-              </div>
-            ) : (
-              <div className="materials-used-list">
-                {sortedDraftMaterials.map((m) => {
-                  const total = round2(
-                    (Number(m.quantity) || 0) * (Number(m.unitPrice) || 0),
-                  );
-                  return (
-                    <button
-                      key={m.id}
-                      type="button"
-                      className="materials-used-row"
-                      onClick={() => openEditMaterial(m.id)}
-                    >
-                      <span>
-                        <span className="materials-used-name">{m.name}</span>
-                        <span className="materials-used-meta">
-                          {m.quantity} {m.unit || "ud"} ·{" "}
-                          {formatEUR(m.unitPrice)}/{m.unit || "ud"}
-                        </span>
-                      </span>
-                      <span>
-                        <span className="materials-used-total">
-                          {formatEUR(total)}
-                        </span>
-                        <span className="materials-used-edit-hint">
-                          Editar
-                        </span>
-                      </span>
-                    </button>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-        </Modal>
-      )}
-
-      {(addingUsed || editingMaterial) && (
-        <MaterialUsedEditor
-          initial={editingMaterial}
-          catalog={data.materials}
-          onClose={closeMaterialEditor}
-          onSave={saveMaterialUsed}
-          onDelete={
-            editingMaterial
-              ? () => removeMaterialRow(editingMaterial.id)
-              : undefined
-          }
-        />
-      )}
     </div>
-  );
-}
-
-function MaterialUsedEditor({
-  initial,
-  catalog,
-  onClose,
-  onSave,
-  onDelete,
-}: {
-  initial: EventMaterialUsed | null;
-  catalog: Material[];
-  onClose: () => void;
-  onSave: (row: EventMaterialUsed, isNew: boolean) => void;
-  onDelete?: () => void;
-}) {
-  const isNew = !initial;
-  const [catalogId, setCatalogId] = useState(initial?.materialId || "");
-  const [name, setName] = useState(initial?.name || "");
-  const [quantity, setQuantity] = useState(String(initial?.quantity ?? "1"));
-  const [unit, setUnit] = useState(initial?.unit || "kg");
-  const [unitPrice, setUnitPrice] = useState(
-    String(initial?.unitPrice ?? ""),
-  );
-
-  const lineTotal = round2(
-    (Number(quantity) || 0) * (Number(unitPrice) || 0),
-  );
-
-  function applyCatalog(materialId: string) {
-    setCatalogId(materialId);
-    const mat = catalog.find((m) => m.id === materialId);
-    if (!mat) return;
-    setName(mat.name);
-    setUnit(mat.unit || "kg");
-    setUnitPrice(String(mat.price));
-    if (!quantity) setQuantity("1");
-  }
-
-  function handleSubmit(e: FormEvent) {
-    e.preventDefault();
-    const trimmed = name.trim();
-    if (!trimmed) return;
-    onSave(
-      {
-        id: initial?.id || uid("emu"),
-        materialId: catalogId || initial?.materialId,
-        name: trimmed,
-        quantity: Number(quantity) || 0,
-        unit: unit.trim() || "ud",
-        unitPrice: Number(unitPrice) || 0,
-      },
-      isNew,
-    );
-  }
-
-  return (
-    <Modal
-      title={isNew ? "Añadir materia prima" : "Editar materia prima"}
-      subtitle={`Total línea · ${formatEUR(lineTotal)}`}
-      onClose={onClose}
-      footer={
-        <div className="modal-actions modal-actions-spread">
-          {onDelete ? (
-            <button
-              type="button"
-              className="btn btn-danger"
-              onClick={() => {
-                if (confirm(`¿Eliminar “${initial?.name || "este ítem"}”?`)) {
-                  onDelete();
-                }
-              }}
-            >
-              <Trash2 size={16} /> Eliminar
-            </button>
-          ) : (
-            <button type="button" className="btn btn-ghost" onClick={onClose}>
-              Cancelar
-            </button>
-          )}
-          <button
-            type="submit"
-            form="material-used-form"
-            className="btn btn-primary"
-            disabled={!name.trim()}
-          >
-            Guardar
-          </button>
-        </div>
-      }
-    >
-      <form id="material-used-form" onSubmit={handleSubmit}>
-        {isNew && (
-          <div className="field">
-            <label>Del catálogo</label>
-            <select
-              value={catalogId}
-              onChange={(e) => {
-                if (e.target.value) applyCatalog(e.target.value);
-              }}
-            >
-              <option value="">Selecciona un ingrediente…</option>
-              {catalog.map((m) => (
-                <option key={m.id} value={m.id}>
-                  {m.name} ({formatEUR(m.price)}/{m.unit || "ud"})
-                </option>
-              ))}
-            </select>
-          </div>
-        )}
-
-        <div className="field">
-          <label>Ingrediente</label>
-          <input
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            placeholder="Nombre"
-            required
-          />
-        </div>
-
-        <div className="grid grid-2">
-          <div className="field">
-            <label>Cantidad</label>
-            <input
-              type="number"
-              min="0"
-              step="0.01"
-              value={quantity}
-              onChange={(e) => setQuantity(e.target.value)}
-            />
-          </div>
-          <div className="field">
-            <label>Unidad</label>
-            <input
-              value={unit}
-              onChange={(e) => setUnit(e.target.value)}
-              placeholder="kg"
-            />
-          </div>
-        </div>
-
-        <div className="field">
-          <label>Precio / ud. (€)</label>
-          <input
-            type="number"
-            min="0"
-            step="0.01"
-            value={unitPrice}
-            onChange={(e) => setUnitPrice(e.target.value)}
-          />
-        </div>
-      </form>
-    </Modal>
   );
 }
 

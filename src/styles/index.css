@@ -3797,40 +3797,6 @@ tbody tr.row-clickable:hover td {
   line-height: 1.4;
 }
 
-.materials-screen {
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
-  min-height: 100%;
-}
-
-.materials-screen-summary {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 1rem;
-  padding: 1rem 1.1rem;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-sm);
-  background: linear-gradient(
-    135deg,
-    rgba(168, 85, 224, 0.16),
-    rgba(14, 6, 24, 0.45)
-  );
-}
-
-.materials-screen-summary-label {
-  color: var(--ink-soft);
-  font-size: 0.88rem;
-}
-
-.materials-screen-summary-value {
-  font-family: var(--display);
-  font-size: clamp(1.45rem, 3vw, 1.85rem);
-  font-weight: 700;
-  color: #fecaca;
-}
-
 .materials-used-list {
   display: flex;
   flex-direction: column;
@@ -3893,20 +3859,6 @@ tbody tr.row-clickable:hover td {
   font-size: 0.75rem;
   color: var(--ink-soft);
   text-align: right;
-}
-
-.materials-cover-modal .modal-body {
-  max-height: none;
-}
-
-.materials-cover-modal .modal-footer {
-  display: flex;
-  gap: 0.65rem;
-  flex-wrap: wrap;
-}
-
-.materials-cover-modal .modal-footer .btn {
-  flex: 1 1 10rem;
 }
 
 a.kpi {

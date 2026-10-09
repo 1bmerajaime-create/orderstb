@@ -7,6 +7,7 @@ import { EventDashboardPage } from './pages/EventDashboardPage';
 import { OrdersPage } from './pages/OrdersPage';
 import { NewOrderPage } from './pages/NewOrderPage';
 import { HistoryPage } from './pages/HistoryPage';
+import { MaterialsPage } from './pages/MaterialsPage';
 
 function ScrollToTop() {
   const { pathname } = useLocation();
@@ -137,6 +138,14 @@ export default function App() {
           element={
             <Protected>
               <HistoryPage />
+            </Protected>
+          }
+        />
+        <Route
+          path="/evento/:eventId/materia-prima"
+          element={
+            <Protected>
+              <MaterialsPage />
             </Protected>
           }
         />
