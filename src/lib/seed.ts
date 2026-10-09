@@ -69,6 +69,11 @@ export const seedData: AppData = {
       recipeId: 'prod-refresco',
       sizeId: UNIT_SIZE.id,
     },
+    {
+      id: 'prod-cafe-ud',
+      recipeId: 'prod-cafe',
+      sizeId: UNIT_SIZE.id,
+    },
   ],
   materials: [
     { id: 'mat-acai', name: 'Açaí base', price: 4.2, unit: 'kg', kind: 'otro' },

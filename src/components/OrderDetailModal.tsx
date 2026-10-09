@@ -273,7 +273,22 @@ function BowlLineRow({
             <div className="bowl-breakdown-col">
               <span className="bowl-breakdown-label">Producto</span>
               <div className="bowl-breakdown-chips">
-                <span className="bowl-chip">{line.productName}</span>
+                <span className="bowl-chip">
+                  {line.ingredients?.length
+                    ? `${line.productName} · ${line.ingredients.join(', ')}`
+                    : line.productName}
+                </span>
+              </div>
+            </div>
+          ) : line.ingredients?.length ? (
+            <div className="bowl-breakdown-col">
+              <span className="bowl-breakdown-label">Tipo</span>
+              <div className="bowl-breakdown-chips">
+                {line.ingredients.map((item) => (
+                  <span key={item} className="bowl-chip">
+                    {item}
+                  </span>
+                ))}
               </div>
             </div>
           ) : null

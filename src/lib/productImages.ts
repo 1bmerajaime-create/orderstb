@@ -13,6 +13,8 @@ const BY_NAME: Record<string, string> = {
   'crea tu acai': laTropicoqueta,
   agua: aguaImg,
   refresco: refrescoImg,
+  cafe: refrescoImg,
+  café: refrescoImg,
 };
 
 /** Imagen de producto; prioriza imageUrl de receta, luego nombre, luego fallback. */

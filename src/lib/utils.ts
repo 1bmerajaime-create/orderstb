@@ -319,7 +319,12 @@ function isDrinkOrderLine(line: OrderLine, data: AppData): boolean {
   if (recipe) return isSimpleRecipe(recipe);
   if (typeof line.size === 'number' && line.size > 0) return false;
   const name = line.productName.trim().toLowerCase();
-  return name === 'agua' || name === 'refresco';
+  return (
+    name === 'agua' ||
+    name === 'refresco' ||
+    name === 'cafe' ||
+    name === 'café'
+  );
 }
 
 export function globalKPIs(data: AppData) {

@@ -90,7 +90,29 @@ export const CANONICAL_SIMPLE_RECIPES: ProductRecipe[] = [
     kind: 'simple',
     unitPrice: 2.5,
   },
+  {
+    id: 'prod-cafe',
+    name: 'Café',
+    description: 'Café',
+    ingredients: [],
+    kind: 'simple',
+    unitPrice: 2,
+  },
 ];
+
+/** Variantes a elegir al pedir ciertos productos simples. */
+export const SIMPLE_PRODUCT_VARIANTS: Record<string, readonly string[]> = {
+  refresco: ['Aquarius', 'Coca-Cola Zero', 'Coca-Cola Normal', 'Agua'],
+  cafe: ['Solo', 'Cortado', 'Con leche'],
+  café: ['Solo', 'Cortado', 'Con leche'],
+};
+
+export function variantsForSimpleProduct(
+  productName: string,
+): readonly string[] | null {
+  const key = productName.trim().toLowerCase();
+  return SIMPLE_PRODUCT_VARIANTS[key] || null;
+}
 
 export function isSimpleRecipe(
   recipe: Pick<ProductRecipe, 'kind' | 'id' | 'name'> | null | undefined,
@@ -99,7 +121,7 @@ export function isSimpleRecipe(
   if (recipe.kind === 'simple') return true;
   if (recipe.kind === 'bowl') return false;
   const key = (recipe.name || '').trim().toLowerCase();
-  return key === 'agua' || key === 'refresco';
+  return key === 'agua' || key === 'refresco' || key === 'cafe' || key === 'café';
 }
 
 export function formatSizeLabel(size: Pick<BowlSize, 'ml' | 'label'>): string {

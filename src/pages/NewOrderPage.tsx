@@ -38,6 +38,7 @@ import {
   productSizeMl,
   resolveAllProducts,
   variantForSize,
+  variantsForSimpleProduct,
 } from '../lib/productSizes';
 import type {
   Order,
@@ -55,6 +56,8 @@ interface DraftBowl extends BowlConfig {
   basePrice: number;
   baseRecipe: BowlConfig;
   kind: 'bowl' | 'simple';
+  /** Variante de bebida (p. ej. Coca-Cola Zero, Cortado). */
+  variant?: string;
   imageUrl?: string;
   promotionId?: string;
   discountType: LineDiscountType;
@@ -75,6 +78,11 @@ export function NewOrderPage() {
   const [draft, setDraft] = useState<{
     bowl: DraftBowl;
     mode: 'new' | 'edit';
+  } | null>(null);
+  const [simplePick, setSimplePick] = useState<{
+    bowl: DraftBowl;
+    mode: 'new' | 'edit';
+    options: readonly string[];
   } | null>(null);
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('tarjeta');
   const [submitting, setSubmitting] = useState(false);
@@ -114,7 +122,11 @@ export function NewOrderPage() {
           lineDiscount: discount,
           promotionId: bowl.promotionId,
           promotionName: promo?.name,
-          ingredients: simple ? [] : bowlIngredients(config),
+          ingredients: simple
+            ? bowl.variant
+              ? [bowl.variant]
+              : []
+            : bowlIngredients(config),
           customized:
             !simple &&
             !isCustomProduct(bowl.productId) &&
@@ -210,6 +222,15 @@ export function NewOrderPage() {
   function startNewBowlFromGroup(variants: ResolvedProduct[]) {
     const product = defaultVariant(variants);
     if (product.kind === 'simple') {
+      const options = variantsForSimpleProduct(product.name);
+      if (options) {
+        setSimplePick({
+          bowl: makeBowl(product),
+          mode: 'new',
+          options,
+        });
+        return;
+      }
       setBowls((current) => [...current, makeBowl(product)]);
       return;
     }
@@ -220,6 +241,13 @@ export function NewOrderPage() {
   }
 
   function startEditBowl(bowl: DraftBowl) {
+    if (bowl.kind === 'simple') {
+      const options = variantsForSimpleProduct(bowl.productName);
+      if (options) {
+        setSimplePick({ bowl: { ...bowl }, mode: 'edit', options });
+      }
+      return;
+    }
     const variants = resolvedProducts.filter(
       (p) => p.name === bowl.productName,
     );
@@ -245,6 +273,19 @@ export function NewOrderPage() {
       },
       mode: 'edit',
     });
+  }
+
+  function confirmSimplePick(variant: string) {
+    if (!simplePick) return;
+    const nextBowl = { ...simplePick.bowl, variant };
+    if (simplePick.mode === 'new') {
+      setBowls((current) => [...current, nextBowl]);
+    } else {
+      setBowls((current) =>
+        current.map((bowl) => (bowl.id === nextBowl.id ? nextBowl : bowl)),
+      );
+    }
+    setSimplePick(null);
   }
 
   function updateDraft(patch: Partial<DraftBowl>) {
@@ -274,6 +315,7 @@ export function NewOrderPage() {
   function removeBowl(id: string) {
     setBowls((current) => current.filter((bowl) => bowl.id !== id));
     if (draft?.bowl.id === id) setDraft(null);
+    if (simplePick?.bowl.id === id) setSimplePick(null);
   }
 
   function deleteFromModal() {
@@ -430,11 +472,16 @@ export function NewOrderPage() {
                     bowl.discountValue,
                   );
                   const simple = bowl.kind === 'simple';
+                  const hasSimpleVariants = Boolean(
+                    simple && variantsForSimpleProduct(bowl.productName),
+                  );
                   return (
                     <CartItem
                       key={bowl.id}
                       onEdit={
-                        simple ? undefined : () => startEditBowl(bowl)
+                        !simple || hasSimpleVariants
+                          ? () => startEditBowl(bowl)
+                          : undefined
                       }
                     >
                       <span className="cart-item-index">{index + 1}</span>
@@ -446,6 +493,12 @@ export function NewOrderPage() {
                               <span className="cart-item-size">
                                 {' '}
                                 · {bowl.size} ml
+                              </span>
+                            )}
+                            {simple && bowl.variant && (
+                              <span className="cart-item-size">
+                                {' '}
+                                · {bowl.variant}
                               </span>
                             )}
                           </strong>
@@ -460,7 +513,7 @@ export function NewOrderPage() {
                         )}
                         <p>
                           {simple
-                            ? 'Listo'
+                            ? bowl.variant || 'Listo'
                             : bowlIngredients(config).slice(1).join(' · ') ||
                               'Configura el bowl'}
                         </p>
@@ -561,6 +614,20 @@ export function NewOrderPage() {
         />
       )}
 
+      {simplePick && (
+        <SimpleVariantModal
+          productName={simplePick.bowl.productName}
+          options={simplePick.options}
+          selected={simplePick.bowl.variant}
+          price={simplePick.bowl.basePrice}
+          confirmLabel={
+            simplePick.mode === 'new' ? 'Añadir al pedido' : 'Guardar'
+          }
+          onConfirm={confirmSimplePick}
+          onCancel={() => setSimplePick(null)}
+        />
+      )}
+
       {createdOrder && (
         <TicketModal
           order={createdOrder}
@@ -570,6 +637,75 @@ export function NewOrderPage() {
         />
       )}
     </div>
+  );
+}
+
+function SimpleVariantModal({
+  productName,
+  options,
+  selected,
+  price,
+  confirmLabel,
+  onConfirm,
+  onCancel,
+}: {
+  productName: string;
+  options: readonly string[];
+  selected?: string;
+  price: number;
+  confirmLabel: string;
+  onConfirm: (variant: string) => void;
+  onCancel: () => void;
+}) {
+  const [choice, setChoice] = useState(selected || '');
+  const canConfirm = Boolean(choice);
+
+  return (
+    <Modal
+      title={`Elegir ${productName.toLowerCase()}`}
+      onClose={onCancel}
+      className="simple-variant-modal"
+      footer={
+        <button
+          type="button"
+          className="btn btn-primary btn-lg bowl-modal-confirm"
+          disabled={!canConfirm}
+          onClick={() => canConfirm && onConfirm(choice)}
+        >
+          <span className="bowl-modal-confirm-label">
+            {canConfirm ? confirmLabel : 'Elige una opción'}
+          </span>
+          {canConfirm && (
+            <span className="bowl-modal-confirm-price">{formatEUR(price)}</span>
+          )}
+        </button>
+      }
+    >
+      <div className="builder-section">
+        <div className="builder-section-head">
+          <div>
+            <strong>Tipo</strong>
+            <span>Selecciona una opción para continuar</span>
+          </div>
+        </div>
+        <div className="builder-options">
+          {options.map((option) => {
+            const active = choice === option;
+            return (
+              <button
+                key={option}
+                type="button"
+                className={`builder-option${active ? ' active' : ''}`}
+                aria-pressed={active}
+                onClick={() => setChoice(option)}
+              >
+                {option}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    </Modal>
   );
 }
 
@@ -973,6 +1109,15 @@ function draftFromOrderLine(
   const size = simple
     ? 0
     : line.size || (matched ? productSizeMl(matched) : DEFAULT_BOWL_SIZE);
+  const variantOptions = simple
+    ? variantsForSimpleProduct(matched?.name || line.productName)
+    : null;
+  const variant =
+    simple && line.ingredients?.length
+      ? line.ingredients.find((item) =>
+          variantOptions ? variantOptions.includes(item) : true,
+        ) || line.ingredients[0]
+      : undefined;
   return {
     id: uid('bowl'),
     productId: matched?.id || line.productId,
@@ -993,6 +1138,7 @@ function draftFromOrderLine(
     fruits: [...recipe.fruits],
     whey: recipe.whey,
     kind: simple ? 'simple' : 'bowl',
+    variant,
     imageUrl: matched?.imageUrl,
     promotionId: line.promotionId,
     discountType: line.promotionId

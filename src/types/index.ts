@@ -41,7 +41,7 @@ export interface ProductRecipe {
   description?: string;
   ingredients: string[];
   /**
-   * bowl = açaí configurable; simple = se añade directo al pedido (agua, refresco…).
+   * bowl = açaí configurable; simple = bebida/producto sin toppings (agua, refresco, café…).
    * Por defecto: bowl.
    */
   kind?: 'bowl' | 'simple';
