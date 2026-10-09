@@ -159,6 +159,16 @@ export function EventDashboardPage() {
       })
     : 0;
 
+  const sortedDraftMaterials = useMemo(
+    () =>
+      [...draftMaterials].sort((a, b) => {
+        const totalA = (Number(a.quantity) || 0) * (Number(a.unitPrice) || 0);
+        const totalB = (Number(b.quantity) || 0) * (Number(b.unitPrice) || 0);
+        return totalB - totalA;
+      }),
+    [draftMaterials],
+  );
+
   if (!event || !kpis) return <Navigate to="/" replace />;
 
   function flushMaterials(next: EventMaterialUsed[]) {
@@ -570,7 +580,7 @@ export function EventDashboardPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {draftMaterials.map((m) => (
+                  {sortedDraftMaterials.map((m) => (
                     <tr key={m.id}>
                       <td>
                         <input
