@@ -26,7 +26,7 @@ import {
   round2,
   uid,
 } from "../lib/utils";
-import type { EventMaterialUsed } from "../types";
+import type { EventMaterialUsed, Material } from "../types";
 
 const DAY_SERIES_COLORS = [
   "#a855e0",
@@ -44,6 +44,8 @@ export function EventDashboardPage() {
   const event = data.events.find((e) => e.id === eventId);
   const [editing, setEditing] = useState(false);
   const [showMaterials, setShowMaterials] = useState(false);
+  const [editingUsedId, setEditingUsedId] = useState<string | null>(null);
+  const [addingUsed, setAddingUsed] = useState(false);
   const [salesProductId, setSalesProductId] = useState("all");
   const [salesDay, setSalesDay] = useState("all");
   const [draftMaterials, setDraftMaterials] = useState<EventMaterialUsed[]>([]);
@@ -74,6 +76,8 @@ export function EventDashboardPage() {
   useEffect(() => {
     if (!showMaterials || !event) return;
     setDraftMaterials(event.materialsUsed || []);
+    setEditingUsedId(null);
+    setAddingUsed(false);
   }, [showMaterials, event?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
@@ -193,35 +197,47 @@ export function EventDashboardPage() {
     setEditing(false);
   }
 
-  function addMaterialFromCatalog(materialId: string) {
-    const mat = data.materials.find((m) => m.id === materialId);
-    if (!mat || !event) return;
-    const row: EventMaterialUsed = {
-      id: uid("emu"),
-      materialId: mat.id,
-      name: mat.name,
-      quantity: 1,
-      unit: mat.unit || "kg",
-      unitPrice: mat.price,
-    };
-    const next = [...draftMaterials, row];
-    setDraftMaterials(next);
-    flushMaterials(next);
+  function closeMaterialsScreen() {
+    setShowMaterials(false);
+    setEditingUsedId(null);
+    setAddingUsed(false);
   }
 
-  function updateMaterialRow(id: string, patch: Partial<EventMaterialUsed>) {
-    const next = draftMaterials.map((m) =>
-      m.id === id ? { ...m, ...patch } : m,
-    );
+  function openAddMaterial() {
+    setEditingUsedId(null);
+    setAddingUsed(true);
+  }
+
+  function openEditMaterial(id: string) {
+    setAddingUsed(false);
+    setEditingUsedId(id);
+  }
+
+  function closeMaterialEditor() {
+    setEditingUsedId(null);
+    setAddingUsed(false);
+  }
+
+  function saveMaterialUsed(row: EventMaterialUsed, isNew: boolean) {
+    const next = isNew
+      ? [...draftMaterials, row]
+      : draftMaterials.map((m) => (m.id === row.id ? row : m));
     setDraftMaterials(next);
     flushMaterials(next);
+    closeMaterialEditor();
   }
 
   function removeMaterialRow(id: string) {
     const next = draftMaterials.filter((m) => m.id !== id);
     setDraftMaterials(next);
     flushMaterials(next);
+    closeMaterialEditor();
   }
+
+  const editingMaterial =
+    editingUsedId != null
+      ? draftMaterials.find((m) => m.id === editingUsedId) || null
+      : null;
 
   return (
     <div className="app-shell">
@@ -534,136 +550,240 @@ export function EventDashboardPage() {
       {showMaterials && (
         <Modal
           title="Materia prima gastada"
-          onClose={() => setShowMaterials(false)}
-          wide
+          subtitle={event.name}
+          onClose={closeMaterialsScreen}
+          cover
+          className="materials-cover-modal"
+          footer={
+            <button
+              type="button"
+              className="btn btn-primary"
+              onClick={openAddMaterial}
+            >
+              <Plus size={16} /> Añadir
+            </button>
+          }
         >
-          <div className="materials-modal-total">
-            Total registrado: <strong>{formatEUR(materialsTotal)}</strong>
-          </div>
+          <div className="materials-screen">
+            <div className="materials-screen-summary">
+              <span className="materials-screen-summary-label">
+                Total registrado
+              </span>
+              <strong className="materials-screen-summary-value">
+                {formatEUR(materialsTotal)}
+              </strong>
+            </div>
 
-          <div className="field">
-            <label>Añadir del catálogo</label>
-            <select
-              defaultValue=""
-              onChange={(e) => {
-                if (e.target.value) {
-                  addMaterialFromCatalog(e.target.value);
-                  e.target.value = "";
+            {draftMaterials.length === 0 ? (
+              <div className="empty">
+                <strong>Sin consumo registrado</strong>
+                Añade ingredientes del catálogo y ajusta cantidad y precio.
+              </div>
+            ) : (
+              <div className="materials-used-list">
+                {sortedDraftMaterials.map((m) => {
+                  const total = round2(
+                    (Number(m.quantity) || 0) * (Number(m.unitPrice) || 0),
+                  );
+                  return (
+                    <button
+                      key={m.id}
+                      type="button"
+                      className="materials-used-row"
+                      onClick={() => openEditMaterial(m.id)}
+                    >
+                      <span>
+                        <span className="materials-used-name">{m.name}</span>
+                        <span className="materials-used-meta">
+                          {m.quantity} {m.unit || "ud"} ·{" "}
+                          {formatEUR(m.unitPrice)}/{m.unit || "ud"}
+                        </span>
+                      </span>
+                      <span>
+                        <span className="materials-used-total">
+                          {formatEUR(total)}
+                        </span>
+                        <span className="materials-used-edit-hint">
+                          Editar
+                        </span>
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </Modal>
+      )}
+
+      {(addingUsed || editingMaterial) && (
+        <MaterialUsedEditor
+          initial={editingMaterial}
+          catalog={data.materials}
+          onClose={closeMaterialEditor}
+          onSave={saveMaterialUsed}
+          onDelete={
+            editingMaterial
+              ? () => removeMaterialRow(editingMaterial.id)
+              : undefined
+          }
+        />
+      )}
+    </div>
+  );
+}
+
+function MaterialUsedEditor({
+  initial,
+  catalog,
+  onClose,
+  onSave,
+  onDelete,
+}: {
+  initial: EventMaterialUsed | null;
+  catalog: Material[];
+  onClose: () => void;
+  onSave: (row: EventMaterialUsed, isNew: boolean) => void;
+  onDelete?: () => void;
+}) {
+  const isNew = !initial;
+  const [catalogId, setCatalogId] = useState(initial?.materialId || "");
+  const [name, setName] = useState(initial?.name || "");
+  const [quantity, setQuantity] = useState(String(initial?.quantity ?? "1"));
+  const [unit, setUnit] = useState(initial?.unit || "kg");
+  const [unitPrice, setUnitPrice] = useState(
+    String(initial?.unitPrice ?? ""),
+  );
+
+  const lineTotal = round2(
+    (Number(quantity) || 0) * (Number(unitPrice) || 0),
+  );
+
+  function applyCatalog(materialId: string) {
+    setCatalogId(materialId);
+    const mat = catalog.find((m) => m.id === materialId);
+    if (!mat) return;
+    setName(mat.name);
+    setUnit(mat.unit || "kg");
+    setUnitPrice(String(mat.price));
+    if (!quantity) setQuantity("1");
+  }
+
+  function handleSubmit(e: FormEvent) {
+    e.preventDefault();
+    const trimmed = name.trim();
+    if (!trimmed) return;
+    onSave(
+      {
+        id: initial?.id || uid("emu"),
+        materialId: catalogId || initial?.materialId,
+        name: trimmed,
+        quantity: Number(quantity) || 0,
+        unit: unit.trim() || "ud",
+        unitPrice: Number(unitPrice) || 0,
+      },
+      isNew,
+    );
+  }
+
+  return (
+    <Modal
+      title={isNew ? "Añadir materia prima" : "Editar materia prima"}
+      subtitle={`Total línea · ${formatEUR(lineTotal)}`}
+      onClose={onClose}
+      footer={
+        <div className="modal-actions modal-actions-spread">
+          {onDelete ? (
+            <button
+              type="button"
+              className="btn btn-danger"
+              onClick={() => {
+                if (confirm(`¿Eliminar “${initial?.name || "este ítem"}”?`)) {
+                  onDelete();
                 }
               }}
             >
+              <Trash2 size={16} /> Eliminar
+            </button>
+          ) : (
+            <button type="button" className="btn btn-ghost" onClick={onClose}>
+              Cancelar
+            </button>
+          )}
+          <button
+            type="submit"
+            form="material-used-form"
+            className="btn btn-primary"
+            disabled={!name.trim()}
+          >
+            Guardar
+          </button>
+        </div>
+      }
+    >
+      <form id="material-used-form" onSubmit={handleSubmit}>
+        {isNew && (
+          <div className="field">
+            <label>Del catálogo</label>
+            <select
+              value={catalogId}
+              onChange={(e) => {
+                if (e.target.value) applyCatalog(e.target.value);
+              }}
+            >
               <option value="">Selecciona un ingrediente…</option>
-              {data.materials.map((m) => (
+              {catalog.map((m) => (
                 <option key={m.id} value={m.id}>
                   {m.name} ({formatEUR(m.price)}/{m.unit || "ud"})
                 </option>
               ))}
             </select>
           </div>
+        )}
 
-          {draftMaterials.length === 0 ? (
-            <div className="empty">
-              <strong>Sin consumo registrado</strong>
-              Añade ingredientes con cantidad (unidades) y precio unitario.
-            </div>
-          ) : (
-            <div className="table-wrap">
-              <table>
-                <thead>
-                  <tr>
-                    <th>Ingrediente</th>
-                    <th>Cantidad</th>
-                    <th>Unidad</th>
-                    <th>Precio / ud.</th>
-                    <th>Total</th>
-                    <th></th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {sortedDraftMaterials.map((m) => (
-                    <tr key={m.id}>
-                      <td>
-                        <input
-                          className="inline-input"
-                          value={m.name}
-                          onChange={(e) =>
-                            updateMaterialRow(m.id, { name: e.target.value })
-                          }
-                        />
-                      </td>
-                      <td>
-                        <input
-                          className="inline-input"
-                          type="number"
-                          min="0"
-                          step="0.01"
-                          value={m.quantity}
-                          onChange={(e) =>
-                            updateMaterialRow(m.id, {
-                              quantity: Number(e.target.value) || 0,
-                            })
-                          }
-                        />
-                      </td>
-                      <td>
-                        <input
-                          className="inline-input"
-                          value={m.unit}
-                          onChange={(e) =>
-                            updateMaterialRow(m.id, { unit: e.target.value })
-                          }
-                        />
-                      </td>
-                      <td>
-                        <input
-                          className="inline-input"
-                          type="number"
-                          min="0"
-                          step="0.01"
-                          value={m.unitPrice}
-                          onChange={(e) =>
-                            updateMaterialRow(m.id, {
-                              unitPrice: Number(e.target.value) || 0,
-                            })
-                          }
-                        />
-                      </td>
-                      <td>
-                        {formatEUR(
-                          round2(
-                            (Number(m.quantity) || 0) *
-                              (Number(m.unitPrice) || 0),
-                          ),
-                        )}
-                      </td>
-                      <td>
-                        <button
-                          className="btn btn-danger btn-sm"
-                          type="button"
-                          onClick={() => removeMaterialRow(m.id)}
-                        >
-                          <Trash2 size={14} />
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
+        <div className="field">
+          <label>Ingrediente</label>
+          <input
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="Nombre"
+            required
+          />
+        </div>
 
-          <div className="modal-actions">
-            <button
-              type="button"
-              className="btn btn-primary"
-              onClick={() => setShowMaterials(false)}
-            >
-              Listo
-            </button>
+        <div className="grid grid-2">
+          <div className="field">
+            <label>Cantidad</label>
+            <input
+              type="number"
+              min="0"
+              step="0.01"
+              value={quantity}
+              onChange={(e) => setQuantity(e.target.value)}
+            />
           </div>
-        </Modal>
-      )}
-    </div>
+          <div className="field">
+            <label>Unidad</label>
+            <input
+              value={unit}
+              onChange={(e) => setUnit(e.target.value)}
+              placeholder="kg"
+            />
+          </div>
+        </div>
+
+        <div className="field">
+          <label>Precio / ud. (€)</label>
+          <input
+            type="number"
+            min="0"
+            step="0.01"
+            value={unitPrice}
+            onChange={(e) => setUnitPrice(e.target.value)}
+          />
+        </div>
+      </form>
+    </Modal>
   );
 }
 

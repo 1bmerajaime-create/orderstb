@@ -943,32 +943,51 @@ tbody tr.row-clickable:hover td {
   align-items: flex-end;
   justify-content: center;
   z-index: 100;
-  padding: 1rem;
+  padding: 0;
   animation: fadeIn 0.25s var(--ease);
 }
 
-@media (min-width: 640px) {
-  .modal-backdrop {
-    align-items: center;
-  }
+/* Nested overlays (edit sheet sobre lista a pantalla completa) */
+.modal-backdrop ~ .modal-backdrop {
+  z-index: 120;
 }
 
 .modal {
-  width: min(520px, 100%);
+  width: 100%;
   max-height: min(92dvh, 900px);
   display: flex;
   flex-direction: column;
   overflow: hidden;
   background: var(--bg-2);
   border: 1px solid var(--line);
-  border-radius: var(--radius);
+  border-radius: 1.25rem 1.25rem 0 0;
+  border-bottom: none;
   padding: 0;
   box-shadow: var(--shadow);
-  animation: scaleIn 0.3s var(--ease);
+  animation: sheetUp 0.32s var(--ease);
 }
 
 .modal.wide {
-  width: min(780px, 100%);
+  width: 100%;
+}
+
+/* iPad + desktop: modal centrado */
+@media (min-width: 640px) {
+  .modal-backdrop:not(.modal-backdrop-fullscreen):not(.modal-backdrop-cover) {
+    align-items: center;
+    padding: 1rem;
+  }
+
+  .modal:not(.modal-fullscreen):not(.modal-cover) {
+    width: min(520px, 100%);
+    border-radius: var(--radius);
+    border: 1px solid var(--line);
+    animation: scaleIn 0.3s var(--ease);
+  }
+
+  .modal.wide:not(.modal-fullscreen):not(.modal-cover) {
+    width: min(780px, 100%);
+  }
 }
 
 .modal-backdrop-fullscreen {
@@ -984,6 +1003,7 @@ tbody tr.row-clickable:hover td {
   border-radius: 0;
   border-left: none;
   border-right: none;
+  animation: fadeIn 0.25s var(--ease);
 }
 
 .modal-backdrop-cover {
@@ -998,6 +1018,13 @@ tbody tr.row-clickable:hover td {
   max-height: 100dvh;
   border-radius: 0;
   border: none;
+  animation: fadeIn 0.25s var(--ease);
+}
+
+@media (max-width: 899px) {
+  .modal.modal-fullscreen:not(.modal-cover) {
+    animation: sheetUp 0.32s var(--ease);
+  }
 }
 
 @media (min-width: 900px) {
@@ -1578,6 +1605,17 @@ tbody tr.row-clickable:hover td {
   to {
     opacity: 1;
     transform: scale(1) translateY(0);
+  }
+}
+
+@keyframes sheetUp {
+  from {
+    opacity: 0;
+    transform: translateY(100%);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
   }
 }
 
@@ -3757,6 +3795,118 @@ tbody tr.row-clickable:hover td {
   font-size: 0.82rem;
   color: var(--lavender);
   line-height: 1.4;
+}
+
+.materials-screen {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  min-height: 100%;
+}
+
+.materials-screen-summary {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1rem 1.1rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: linear-gradient(
+    135deg,
+    rgba(168, 85, 224, 0.16),
+    rgba(14, 6, 24, 0.45)
+  );
+}
+
+.materials-screen-summary-label {
+  color: var(--ink-soft);
+  font-size: 0.88rem;
+}
+
+.materials-screen-summary-value {
+  font-family: var(--display);
+  font-size: clamp(1.45rem, 3vw, 1.85rem);
+  font-weight: 700;
+  color: #fecaca;
+}
+
+.materials-used-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+}
+
+.materials-used-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.75rem 1rem;
+  align-items: center;
+  width: 100%;
+  padding: 1rem 1.05rem;
+  border: 1px solid var(--line);
+  border-radius: 1rem;
+  background: rgba(14, 6, 24, 0.42);
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.2s var(--ease), transform 0.2s var(--ease),
+    background 0.2s var(--ease);
+}
+
+.materials-used-row:hover {
+  border-color: rgba(168, 85, 224, 0.55);
+  background: rgba(168, 85, 224, 0.12);
+  transform: translateY(-1px);
+}
+
+.materials-used-row:active {
+  transform: translateY(0);
+}
+
+.materials-used-name {
+  display: block;
+  font-weight: 700;
+  font-size: 1.05rem;
+  line-height: 1.25;
+}
+
+.materials-used-meta {
+  display: block;
+  margin-top: 0.28rem;
+  color: var(--ink-soft);
+  font-size: 0.88rem;
+}
+
+.materials-used-total {
+  font-family: var(--display);
+  font-size: 1.2rem;
+  font-weight: 700;
+  color: var(--lavender-bright);
+  white-space: nowrap;
+}
+
+.materials-used-edit-hint {
+  display: block;
+  margin-top: 0.2rem;
+  font-size: 0.75rem;
+  color: var(--ink-soft);
+  text-align: right;
+}
+
+.materials-cover-modal .modal-body {
+  max-height: none;
+}
+
+.materials-cover-modal .modal-footer {
+  display: flex;
+  gap: 0.65rem;
+  flex-wrap: wrap;
+}
+
+.materials-cover-modal .modal-footer .btn {
+  flex: 1 1 10rem;
 }
 
 a.kpi {
